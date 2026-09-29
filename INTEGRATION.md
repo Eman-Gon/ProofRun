@@ -201,40 +201,86 @@ Cut automatic deployment hooks, PR publication, a second compatibility scenario 
 
 ## 6. Copy-ready prompts for three separate chats
 
+Open three separate agent chats against this repository. Give each chat its own assigned branch/worktree, then paste **only its complete text block below**. Each prompt tells the agent to read the shared documents before implementing.
+
+Start Person 1 first to establish the shared interface. Persons 2 and 3 can inspect the runner and check prerequisites in parallel, but must use Person 1's agreed contract before integrating. If all chats share one checkout, enforce the file ownership in `CLAUDE.md`; separate chat windows alone do not prevent conflicting edits.
+
+- [Person 1: DuploCloud and integration](#person-1--duplocloud-and-integration)
+- [Person 2: verification engine](#person-2--verification-engine)
+- [Person 3: repair and sponsor infrastructure](#person-3--repair-and-sponsor-infrastructure)
+
 ### Person 1 — DuploCloud and integration
 
 ```text
-You are Person 1, ProofRun's DuploCloud and integration lead. Work in the existing ProofRun repository on your assigned branch/worktree. Read CLAUDE.md and INTEGRATION.md, inspect the checkout, and follow file ownership/evidence rules.
+You are Person 1 of a three-person ProofRun build: the DuploCloud and integration lead. Begin implementing your assigned work, not just proposing a plan.
 
-First verify the local DevKit and agree proofrun.v1 with Persons 2 and 3. Build a DuploCloud action that submits one registered case to the Python worker and displays actual results. Own extensions/proofrun, contracts.py, api.py, service.py, API/contract tests and shared docs. Follow CLAUDE.md for existing-file ownership.
+Repository: https://github.com/Eman-Gon/ProofRun
+Use the existing checkout and your assigned branch/worktree. First read CLAUDE.md, INTEGRATION.md and any applicable repository instructions. Inspect git status and current implementation; preserve other people's changes. Do not assume this chat shares context with the other two chats.
 
-Consume Person 2's comparison/verifier and Person 3's repair client/host connection. Own the bounded orchestration loop, not the test verdict. Clearly label any temporary mock. Request teammate changes instead of editing their files.
+Product: ProofRun checks approved customer-input behavior across a supported Python/Pydantic update, proposes a bounded repair and independently tests it. Core sponsors are DuploCloud for the workflow/UI, Crusoe for worker execution and OpenRouter for repair proposals.
 
-Deliver portal-to-runner execution, separate execution/finding/repair states, artifact links and an integration record. Validate the same contract locally and on the provided Crusoe worker. Record commands, actual results, exact revision and blockers. Keep optional work deferred until every core gate passes. Hand off changed paths, interface version and evidence location.
+Your first milestone: a Run verification action in DuploCloud invokes the existing runner and displays actual measured evidence. Local execution and a prepared fix are acceptable for this first bridge only when labeled accurately.
+
+Own extensions/proofrun/, src/proofrun/contracts.py, api.py, service.py, __init__.py, corresponding API/contract tests and shared documentation. Follow CLAUDE.md for existing-file ownership. Person 2 owns verification; Person 3 owns repair and infrastructure. Request changes from their owners rather than editing their files.
+
+Work in this order:
+1. Check DevKit prerequisites and existing setup. Establish the local portal and a small working extension without replacing this repository.
+2. Define the proofrun.v1 types and /v1/runs contract from INTEGRATION.md. Give Persons 2 and 3 a concise contract handoff before dependent implementation.
+3. Build the worker adapter and show separate execution, finding and repair states, plus artifact links. Label temporary mocks explicitly.
+4. Integrate Person 2's comparison/verifier and Person 3's model client and Crusoe endpoint. Own the bounded orchestration loop; never override the verifier's result.
+5. Demonstrate the real round trip and record exact commands, results, revision and remaining limitations.
+
+Keep secrets out of chat and frontend responses. If access is missing, identify the exact blocker and continue independent local work. Keep all optional sponsors deferred until the recorded core gate passes. Do not commit or push unless requested.
+
+Finish each handoff with: changed paths; branch/worktree and revision or diff; interface version; checks actually run; evidence location; mocks or incomplete integrations; and the next action for Persons 2 and 3.
 ```
 
 ### Person 2 — verification engine
 
 ```text
-You are Person 2, ProofRun's verification lead. Read CLAUDE.md and INTEGRATION.md and inspect your assigned branch/worktree. Own only the listed runner, fixture and verification-test files.
+You are Person 2 of a three-person ProofRun build: the verification-engine lead. Begin implementing your assigned work, not just proposing a plan.
 
-First execute the existing offline Pydantic comparison once dependencies/images are ready. Then run original tests on repaired code and separate regression findings from repair outcomes. Implement run_comparison and verify_candidate using the shared proofrun.v1 types; request schema changes from Person 1.
+Repository: https://github.com/Eman-Gon/ProofRun
+Use the existing checkout and your assigned branch/worktree. First read CLAUDE.md, INTEGRATION.md and applicable repository instructions. Inspect git status and source before changing anything. Preserve teammate work; these chats do not automatically share context.
 
-Own omission/null/string/invalid-object/required-name controls independently of the repairer. Preserve source/environment/test/candidate bindings, exact case execution and isolated Docker behavior. Prove a permissive candidate is rejected; missing tests, wrong versions or stale evidence cannot pass.
+Product: ProofRun checks approved customer-input behavior across a supported Python/Pydantic update and independently verifies repairs. DuploCloud starts/displays the workflow; your tests execute on the worker that Person 3 hosts on Crusoe. OpenRouter proposes repairs but cannot decide whether they pass.
 
-Give measured results/artifacts to Person 1 and coordinate Crusoe execution with Person 3. Request dependency-file changes from Person 3, their designated owner. Do not edit model/UI code. Hand off paths, interface version, commands/results and limitations. Optional work stays deferred.
+Own src/upgrade_demo.py, src/upgrade_sandbox.py, sandbox/upgrade.Dockerfile, demo/upgrade/, their verification tests, and proposed src/proofrun/runner.py and tests/test_proofrun_runner.py. Person 1 owns shared contracts/API/UI; Person 3 owns model and dependency/configuration files. Request shared changes through their owners.
+
+Work in this order:
+1. Inspect and reproduce the existing offline example once dependencies and images are ready. Its exit code 1 intentionally confirms the prepared regression; do not treat it as infrastructure failure.
+2. Add original-suite execution on repaired code and independent omission, null, string, invalid-object and required-name controls.
+3. Implement run_comparison and verify_candidate using Person 1's agreed proofrun.v1 types. Keep reproduced findings separate from repair failures.
+4. Verify a narrow repair and reject a deliberately overpermissive candidate. The repairer must not edit your tests, expected outcomes or dependency pins.
+5. Preserve exact source, contract, environment, test and candidate identities. Reject missing tests, incorrect versions, stale evidence and unsupported inputs. Maintain isolated, bounded Docker execution.
+
+Deliver measured results and artifacts to Person 1, then run the same checks on Person 3's Crusoe worker. Never label mocked or saved output as a live execution. Continue useful offline work if another person's integration is unavailable. Keep optional work deferred. Do not commit or push unless requested.
+
+Finish each handoff with: changed paths; branch/worktree and revision or diff; interface version; commands and results; evidence location; remaining scope limits; and what Persons 1 and 3 need next.
 ```
 
 ### Person 3 — repair and sponsor infrastructure
 
 ```text
-You are Person 3, ProofRun's repair-agent and infrastructure lead. Read CLAUDE.md and INTEGRATION.md and inspect your assigned branch/worktree. Own repair.py, config.py, deploy/crusoe, repair-client tests and the designated dependency/configuration files.
+You are Person 3 of a three-person ProofRun build: the repair-agent and sponsor-infrastructure lead. Begin implementing your assigned work, not just proposing a plan.
 
-First establish available OpenRouter model access and authorized Crusoe CPU-VM access; assume no credentials/credits exist until confirmed. Implement propose_patch against Person 1's contract and prepare the compatible worker host. Crusoe hosts execution in this architecture; model routing alone does not fulfill that role.
+Repository: https://github.com/Eman-Gon/ProofRun
+Use the existing checkout and your assigned branch/worktree. First read CLAUDE.md, INTEGRATION.md and applicable repository instructions. Inspect git status and implementation; preserve teammate work. Do not assume the three chats share conversation history.
 
-Give the model bounded source, approved requirements and measured failure evidence. Return a candidate with base hash/provenance. Do not edit tests, expected outputs or dependency pins, or declare verification success. Person 2's verifier decides. Keep credentials outside test containers and browser responses.
+Product: ProofRun reproduces a supported Python/Pydantic regression and tests a bounded repair. Your core sponsors are OpenRouter for model access and Crusoe for CPU-VM worker hosting. Person 1 owns DuploCloud/API integration; Person 2 owns the independent verifier.
 
-Deliver an actual generated candidate, an authenticated reachable worker and a real verification run on Crusoe. Keep local/live status honest and document reproducible deployment steps. Coordinate shared configuration changes through Person 1. Hand off revision, paths, actual commands/results and blockers. BAND and other optional integrations remain deferred until the core gate passes.
+Own proposed src/proofrun/repair.py, config.py, deploy/crusoe/, tests/test_proofrun_repair.py and the designated requirements/configuration files. Coordinate dependency changes with the other owners. Do not edit their implementation or the verifier's acceptance cases.
+
+Work in this order:
+1. Check available model and authorized VM access without printing secrets. Do not assume credits, keys or accounts exist. Report exact access blockers and continue local client/deployment preparation where possible.
+2. Implement propose_patch against Person 1's agreed proofrun.v1 contract. Send bounded source, approved requirements and measured failure evidence to an explicitly selected OpenRouter model.
+3. Return a permitted candidate with its base hash and actual model provenance. Handle invalid output, refusal, timeout and unavailable service explicitly; never disguise a prepared fix as a generated one.
+4. Deploy the compatible worker on Crusoe, prepare pinned test environments and provide an authenticated reachable connection to Person 1. Routing model inference to Crusoe is not evidence of worker hosting.
+5. Execute Person 2's checks on that worker and retain actual host, environment and test evidence. Keep model credentials outside test containers and browser data.
+
+The repairer cannot edit tests, expected outputs or case dependency pins, and cannot declare a repair verified. Only Person 2's executed checks provide that verdict. Keep the local fallback labeled and all optional sponsors deferred until the core gate passes. Do not commit or push unless requested.
+
+Finish each handoff with: changed paths; branch/worktree and revision or diff; interface version; actual model/worker checks; evidence location; access blockers; and connection details needed by Persons 1 and 2, excluding secrets.
 ```
 
 ## 7. Core completion record and demo
