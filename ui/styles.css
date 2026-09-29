@@ -108,7 +108,7 @@ main { min-width: 0; }
 .entry-note { color: var(--muted); }
 .entry-status { color: var(--green); overflow-wrap: anywhere; }
 .entry-error { color: #984d2d; overflow-wrap: anywhere; }
-.project-controls { display: flex; align-items: flex-end; gap: 12px; }
+.project-controls { display: flex; align-items: flex-end; gap: 12px; padding-top: 8px; }
 .project-field { flex: 1; min-width: 0; }
 .project-field label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
 .project-field select { width: 100%; height: 42px; padding: 8px 12px; border: 1px solid #cbd5c7; border-radius: 7px; background: white; text-overflow: ellipsis; }
@@ -129,12 +129,15 @@ main { min-width: 0; }
 .result-card h2 { margin-bottom: 8px; font-size: 24px; font-weight: 600; line-height: 1.3; letter-spacing: -.45px; overflow-wrap: anywhere; }
 .case-summary { color: #5a685d; line-height: 1.6; max-width: 740px; }
 .scan-boundary { margin: 10px 0 18px; font-size: 12px; color: var(--muted); }
+.review-status { margin: 12px 0 18px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: #f8faf6; color: #52614f; font-size: 12px; overflow-wrap: anywhere; }
 .repository-findings { display: grid; gap: 18px; margin-bottom: 20px; }
 .repository-findings:empty { margin-bottom: 0; }
 .repository-finding { min-width: 0; border-top: 1px solid var(--line); padding-top: 17px; }
 .repository-finding h3 { margin: 7px 0 6px; overflow-wrap: anywhere; }
 .repository-finding > p { color: #5a685d; font-size: 13px; margin-bottom: 12px; overflow-wrap: anywhere; }
 .finding-source { display: inline-block; margin-top: 9px; font-size: 12px; }
+.finding-reproduction { margin: 10px 0 13px; font-size: 12px; color: var(--muted); }
+.finding-reproduction p { margin-top: 7px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .dependency-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
 .dependency-table th { color: var(--muted); font-weight: 500; }
 .dependency-table th, .dependency-table td { padding: 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; vertical-align: top; }
@@ -210,6 +213,7 @@ pre { max-width: 100%; overflow: auto; white-space: pre; background: #f4f6f1; bo
 .history-item > summary .test-status { margin-left: 10px; font-size: 12px; }
 .history-item pre { max-height: 260px; margin: 3px 0 12px; }
 .result-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 12px 1px 0; font-size: 12px; color: var(--muted); }
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .text-button { padding: 2px 0; border: 0; background: transparent; color: var(--green); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
 .text-button:hover:not(:disabled) { color: #182f20; }
 
@@ -228,6 +232,20 @@ pre { max-width: 100%; overflow: auto; white-space: pre; background: #f4f6f1; bo
 .skip-link { position: fixed; z-index: 30; left: 16px; top: -70px; padding: 10px 14px; border-radius: 5px; background: #d7f0b9; color: #203720; }
 .skip-link:focus { top: 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.overlay-dialog { position: fixed; inset: 0; width: min(700px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: white; box-shadow: 0 20px 80px #14201345; }
+.overlay-dialog::backdrop { background: #14201380; }
+.dialog-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.dialog-heading h2 { font-size: 22px; line-height: 1.35; letter-spacing: -.4px; overflow-wrap: anywhere; }
+.dialog-heading button { flex-shrink: 0; }
+.overlay-dialog > p { margin: 10px 0; overflow-wrap: anywhere; }
+.dialog-evidence { padding: 12px; border: 1px solid #ecd9c5; border-radius: 7px; background: var(--amber-light); color: #79522c; font-size: 13px; }
+.dialog-patch { margin: 20px 0; }
+.dialog-patch h3 { margin-bottom: 8px; font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }
+.dialog-patch pre { max-height: 300px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dialog-note, #pr-dialog-revision { color: var(--muted); font-size: 12px; }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.report-dialog { width: min(850px, calc(100vw - 32px)); }
+.report-dialog pre { max-height: 60dvh; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 850px) {
   .app-shell { grid-template-columns: 180px minmax(0, 1fr); }

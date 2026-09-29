@@ -16,18 +16,19 @@ let submitting = false;
 let submittingRepository = false;
 let submittingPr = false;
 let prProgressTimer;
+let prProposal = null;
 
 function startPrProgress(target, repository) {
   submittingPr = { target, startedAt: Date.now() };
   lastCaseSignature = '';
   lastScanSignature = '';
   $('pr-progress').hidden = false;
-  $('pr-progress-title').textContent = `Creating draft PR for ${repository}…`;
+  $('pr-progress-title').textContent = `Creating PR for ${repository}…`;
   const update = () => {
     const seconds = Math.floor((Date.now() - submittingPr.startedAt) / 1000);
     $('pr-progress-time').textContent = `${seconds}s`;
     $('pr-progress-detail').textContent = seconds < 30
-      ? 'Waiting for GitHub to finish creating the branch and draft pull request.'
+      ? 'Waiting for GitHub to finish creating the branch and pull request.'
       : 'Still waiting for GitHub. Creating a fork or branch can take a little longer.';
   };
   update();
@@ -317,16 +318,24 @@ function renderRepository() {
   const running = scan.status === 'running';
   const failed = scan.status === 'failed';
   $('repository-title').textContent = scan.repository;
+  const review = result.review;
   $('repository-badge').textContent = running ? 'Checking repository…' : failed ? 'Scan failed'
-    : findings.length ? 'Potential upgrade issue' : 'No supported patterns found';
+    : findings.length ? 'Potential issues' : review?.status === 'completed' ? 'No issues found in reviewed files' : 'Review incomplete';
   $('repository-badge').classList.toggle('neutral', running || failed || !findings.length);
   $('repository-summary').textContent = running ? 'Reading public source files and dependency manifests…'
     : failed ? scan.error || 'The repository scan could not finish. Check the repository address and try again.'
-      : findings.length ? `${findings.length} potential upgrade ${findings.length === 1 ? 'issue needs' : 'issues need'} review. Check the affected code and upstream documentation below.`
-        : 'No supported patterns found in the files checked. Other incompatibilities may still exist.';
+      : findings.length ? `${findings.length} potential ${findings.length === 1 ? 'issue needs' : 'issues need'} review. Inspect the source evidence and suggested changes below.`
+        : review?.status === 'completed' ? 'No actionable issues were identified in the files reviewed. This is not an exhaustive check.'
+          : 'No static findings were identified. Agent review has not completed; this does not establish that the repository is free of issues.';
   $('repository-saved-status').textContent = running ? 'Scan in progress' : failed ? 'No completed result for this scan'
     : `Checked ${dateLabel(result.checkedAt || scan.finishedAt)}`;
   $('repository-download-button').disabled = running || failed || !scan.result;
+  $('repository-report-button').disabled = running || failed || !scan.result;
+  $('repository-review-status').hidden = running || failed || !review;
+  const reviewLabels = { completed: 'Agent review completed', partial: 'Agent review partial', unavailable: 'Agent review unavailable', failed: 'Agent review failed' };
+  const filesRead = Array.isArray(review?.filesRead) ? review.filesRead.length : 0;
+  $('repository-review-status').textContent = review
+    ? `${reviewLabels[review.status] || 'Agent review incomplete'} · ${filesRead} source ${filesRead === 1 ? 'file' : 'files'} read${review.summary ? `. ${review.summary}` : ''}` : '';
   const explanation = result.explanation;
   const hasExplanation = !running && !failed && explanation && typeof explanation.summary === 'string';
   $('repository-explanation').hidden = !hasExplanation;
@@ -337,8 +346,8 @@ function renderRepository() {
   $('repository-findings').replaceChildren();
   for (const [findingIndex, finding] of findings.entries()) {
     const article = node('article', 'repository-finding');
-    article.append(node('span', 'result-badge', 'Potential upgrade issue'), node('h3', '', finding.title || finding.package),
-      node('p', '', finding.explanation || 'Review this usage before changing dependency versions.'));
+    article.append(node('span', 'result-badge', finding.origin === 'agent' ? 'Agent finding · unverified' : 'Static finding · unverified'), node('h3', '', finding.title || finding.package || 'Potential issue'),
+      node('p', '', finding.explanation || 'Review this source evidence before applying the suggested change.'));
     const diff = node('div', 'diff-card');
     const heading = node('div', 'diff-header');
     const location = `${finding.file || 'Source file'}${Number.isInteger(finding.line) && finding.line > 0 ? `:${finding.line}` : ''}`;
@@ -360,10 +369,16 @@ function renderRepository() {
       diff.append(line);
     }
     article.append(diff, node('p', 'fix-note', 'Suggested change; not applied or tested.'));
+    if (finding.reproduction) {
+      const reproduction = node('details', 'finding-reproduction');
+      reproduction.append(node('summary', '', 'Suggested test'), node('p', '', finding.reproduction));
+      article.append(reproduction);
+    }
     const proposal = scan.pullRequests?.[findingIndex];
     const currentScan = state.repositoryScans.some((item) => item.id === scan.id);
-    const canPropose = ['pandas-hour', 'pydantic-optional'].includes((finding.id || '').split(':')[0])
-      && finding.beforeCode && finding.afterCode && finding.beforeCode.length < 1000 && finding.afterCode.length < 1000;
+    const canPropose = typeof finding.beforeCode === 'string' && typeof finding.afterCode === 'string'
+      && finding.beforeCode.length > 0 && finding.afterCode.length > 0 && finding.beforeCode !== finding.afterCode
+      && new TextEncoder().encode(finding.beforeCode).length <= 4000 && new TextEncoder().encode(finding.afterCode).length <= 4000;
     if (proposal) {
       const link = node('a', 'button secondary compact', `View PR #${proposal.number} ↗`);
       setLink(link, proposal.url);
@@ -372,15 +387,15 @@ function renderRepository() {
       article.append(link);
     } else {
       const pending = submittingPr?.target === `scan:${scan.id}:${findingIndex}`;
-      const button = node('button', 'button primary compact', pending ? 'Creating draft PR…' : 'Create draft PR');
+      const button = node('button', 'button primary compact', pending ? 'Creating PR…' : 'Create PR');
       button.setAttribute('aria-busy', String(pending));
       button.disabled = !canPropose || !currentScan || submittingPr || !connected;
       button.addEventListener('click', () => createPublicPullRequest(scan, findingIndex));
       article.append(button, node('p', 'fix-note', !currentScan ? 'Check this public repository above to prepare a current PR suggestion.' : canPropose
         ? 'Opens an unverified suggestion in this repository. Uses a public fork if needed. GitHub CLI sign-in required.'
-        : 'No automatic patch is available for this finding; review the migration manually.'));
+        : 'No bounded patch is available for this finding; review the source manually.'));
     }
-    const source = node('a', 'finding-source', 'Upstream documentation ↗');
+    const source = node('a', 'finding-source', finding.origin === 'agent' ? 'Source evidence ↗' : 'Upstream documentation ↗');
     source.target = '_blank';
     source.rel = 'noopener noreferrer';
     setLink(source, finding.sourceUrl);
@@ -415,7 +430,7 @@ function renderRepository() {
     table.append(head, body);
     $('repository-dependency-list').append(table);
   } else $('repository-dependency-list').append(node('p', 'muted', 'No dependencies were identified in the supported manifests checked.'));
-  $('repository-scope').textContent = result.scope || 'A limited scan of public source files and dependency manifests for supported upgrade patterns.';
+  $('repository-scope').textContent = result.scope || 'A bounded review of public source files and dependency manifests. Repository code was not executed.';
   const meta = [];
   if (Number.isInteger(result.filesScanned)) meta.push(`${result.filesScanned} files checked`);
   if (result.commit) meta.push(`Commit ${String(result.commit).slice(0, 12)}`);
@@ -519,8 +534,8 @@ function updateRepositoryControls() {
   $('repository-list-status').hidden = !mine || !repositoryListMessage;
   $('repository-list-status').textContent = repositoryListMessage;
   $('repository-note').textContent = mine
-    ? 'Choose one of your public repositories to check for supported dependency upgrade patterns. Repository code is not executed.'
-    : 'Enter any public GitHub repository to check for supported dependency upgrade patterns. Repository code is not executed.';
+    ? 'Choose one of your public repositories for source review and dependency discovery. Repository code is not executed.'
+    : 'Enter a public GitHub repository for source review and dependency discovery. Repository code is not executed.';
   const active = state.activeScan?.status === 'running' ? state.activeScan : null;
   $('repository-button').disabled = !connected || submittingRepository || Boolean(active)
     || (mine && (repositoriesLoading || !ownRepositories.length || !$('my-repository-select').value));
@@ -580,12 +595,12 @@ function renderCase() {
   $('create-pr-button').hidden = !publication.eligible || Boolean(published);
   $('create-pr-button').disabled = submittingPr;
   const pendingPr = submittingPr?.target === `case:${item.id}`;
-  $('create-pr-button').textContent = pendingPr ? 'Creating draft PR…' : 'Create draft PR';
+  $('create-pr-button').textContent = pendingPr ? 'Creating PR…' : 'Create PR';
   $('create-pr-button').setAttribute('aria-busy', String(pendingPr));
   $('create-pr-button').title = publication.reason || '';
   $('pr-status').hidden = !published;
   if (published) {
-    $('pr-link').textContent = `Draft PR #${published.number} created ↗`;
+    $('pr-link').textContent = `${published.draft ? 'Draft PR' : 'PR'} #${published.number} created ↗`;
     setLink($('pr-link'), published.url);
   } else {
     $('pr-link').textContent = '';
@@ -662,7 +677,7 @@ function updateRunPanel() {
   const caseRun = active?.caseId === item.id ? active : null;
   const unavailable = !connected || submitting || Boolean(active) || !item.canRun;
   $('run-button').disabled = unavailable;
-  $('run-button').textContent = (submitting || caseRun) ? 'Comparing…' : 'Run comparison';
+  $('run-button').textContent = (submitting || caseRun) ? 'Comparing…' : 'Run prepared comparison';
   $('run-note').textContent = !item.canRun ? (item.unavailableReason || 'This comparison is unavailable.')
     : caseRun || submitting ? 'Running in Docker. Saved results below will update when finished.'
       : active ? `${runName(active)} is running for another project.`
@@ -821,74 +836,123 @@ async function startRun() {
   finally { submitting = false; updateRunPanel(); }
 }
 
-async function createPublicPullRequest(scan, findingIndex) {
-  if (submittingPr || !window.confirm(`Create a draft PR in ${scan.result.repository} for this suggested change? Tests have not been run. A public fork will be created if needed.`)) return;
-  startPrProgress(`scan:${scan.id}:${findingIndex}`, scan.result.repository);
-  lastScanSignature = '';
+function showPrPreview(proposal) {
+  if (submittingPr) return;
+  prProposal = proposal;
+  $('pr-dialog-summary').textContent = `${proposal.repository} · ${proposal.title}`;
+  $('pr-dialog-evidence').textContent = proposal.evidence;
+  $('pr-dialog-revision').textContent = proposal.commit ? `Reviewed commit ${proposal.commit.slice(0, 12)}` : 'Prepared comparison';
+  $('pr-dialog-path').textContent = proposal.file || 'Proposed patch';
+  $('pr-dialog-patch').textContent = proposal.patch;
+  $('pr-dialog-error').hidden = true;
+  $('pr-dialog-status').hidden = true;
+  $('pr-dialog-create').disabled = false;
+  $('pr-dialog-create').textContent = 'Create PR';
+  $('pr-dialog-create').setAttribute('aria-busy', 'false');
+  $('pr-dialog-cancel').textContent = 'Cancel';
+  $('pr-dialog').showModal();
+  $('pr-dialog-cancel').focus();
+}
+
+function createPublicPullRequest(scan, findingIndex) {
+  const finding = scan.result?.findings?.[findingIndex];
+  if (!finding || scan.status !== 'completed' || !connected) return;
+  showPrPreview({
+    target: `scan:${scan.id}:${findingIndex}`, repository: scan.result.repository,
+    title: finding.title || 'Suggested fix', file: finding.file, commit: scan.result.commit,
+    patch: `--- ${finding.file}\n+++ ${finding.file}\n${String(finding.beforeCode).split('\n').map((line) => `- ${line}`).join('\n')}\n${String(finding.afterCode).split('\n').map((line) => `+ ${line}`).join('\n')}`,
+    evidence: 'Unverified suggestion. Repository tests have not been run. The PR will include this limitation.',
+    payload: { scanId: scan.id, findingIndex },
+  });
+}
+
+function createCasePullRequest() {
+  const item = selectedCase();
+  if (!item?.pullRequest?.eligible || !connected) return;
+  showPrPreview({
+    target: `case:${item.id}`, repository: item.pullRequest.repository || item.repository, title: item.title,
+    file: item.filePath, commit: item.commit, patch: item.patch || `${item.beforeCode}\n→\n${item.afterCode}`,
+    evidence: hasVerifiedFix(item) ? 'This fix passed the recorded comparison checks. Evidence is limited to the shown inputs and environments.'
+      : 'This fix has not been verified in this comparison.',
+    payload: { caseId: item.id },
+  });
+}
+
+async function publishPullRequest() {
+  const proposal = prProposal;
+  if (!proposal || submittingPr || !connected) return;
+  startPrProgress(proposal.target, proposal.repository);
+  $('pr-dialog-create').disabled = true;
+  $('pr-dialog-create').textContent = 'Creating PR…';
+  $('pr-dialog-create').setAttribute('aria-busy', 'true');
+  $('pr-dialog-cancel').textContent = 'Close';
+  $('pr-dialog-error').hidden = true;
+  $('pr-dialog-status').hidden = false;
+  $('pr-dialog-status').textContent = 'Creating the branch and pull request on GitHub. Closing this preview keeps the request running.';
+  renderCase();
   renderRepository();
   try {
     const { response, result } = await requestJson('/api/pull-requests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrfToken },
-      body: JSON.stringify({ scanId: scan.id, findingIndex }),
+      body: JSON.stringify(proposal.payload),
     }, 300000);
-    if (!response.ok) throw new Error(result.error || 'Unable to create the draft PR.');
-    scan.pullRequests = { ...scan.pullRequests, [findingIndex]: result.pullRequest };
-    const current = state.repositoryScans.find((item) => item.id === scan.id);
-    if (current) current.pullRequests = { ...current.pullRequests, [findingIndex]: result.pullRequest };
-    toast(`Draft PR #${result.pullRequest.number} is ready for review.`);
+    if (!response.ok) throw new Error(result.error || 'Unable to create the PR.');
+    if (proposal.payload.scanId) {
+      const current = state.repositoryScans.find((item) => item.id === proposal.payload.scanId);
+      if (current) current.pullRequests = { ...current.pullRequests, [proposal.payload.findingIndex]: result.pullRequest };
+    } else {
+      const current = state.cases.find((item) => item.id === proposal.payload.caseId);
+      if (current?.pullRequest) current.pullRequest.result = result.pullRequest;
+    }
+    $('pr-dialog').close();
+    prProposal = null;
+    toast(`PR #${result.pullRequest.number} created.`);
   } catch (error) {
-    toast(error.message, true);
+    $('pr-dialog-error').textContent = error.message;
+    $('pr-dialog-error').hidden = false;
+    if (!$('pr-dialog').open) toast(error.message, true);
   } finally {
     finishPrProgress();
-    lastScanSignature = '';
+    $('pr-dialog-status').hidden = true;
+    $('pr-dialog-create').disabled = false;
+    $('pr-dialog-create').textContent = 'Create PR';
+    $('pr-dialog-create').setAttribute('aria-busy', 'false');
+    $('pr-dialog-cancel').textContent = 'Cancel';
+    renderCase();
     renderRepository();
   }
 }
 
-async function createDraftPullRequest() {
+function currentReport() {
   const item = selectedCase();
-  if (!item?.pullRequest?.eligible || submittingPr) return;
-  const confirmed = window.confirm(
-    'Create a new GitHub branch and draft pull request containing this verified fix?'
-  );
-  if (!confirmed) return;
-  startPrProgress(`case:${item.id}`, item.repository);
-  lastCaseSignature = '';
-  renderCase();
-  try {
-    const { response, result } = await requestJson('/api/pull-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrfToken },
-      body: JSON.stringify({ caseId: item.id }),
-    }, 45000);
-    if (!response.ok) throw new Error(result.error || 'Unable to create the draft PR.');
-    item.pullRequest.result = result.pullRequest;
-    const current = state.cases.find((candidate) => candidate.id === item.id);
-    if (current?.pullRequest) current.pullRequest.result = result.pullRequest;
-    lastCaseSignature = '';
-    renderCase();
-    toast(`Draft PR #${result.pullRequest.number} created.`);
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    finishPrProgress();
-    lastCaseSignature = '';
-    renderCase();
-  }
+  const scan = selectedScan();
+  if (!item && (!scan?.result || scan.status !== 'completed')) return null;
+  return item ? { exportedAt: new Date().toISOString(), investigation: item, runs: caseRuns() }
+    : { exportedAt: new Date().toISOString(), type: 'static_source_scan', scan };
+}
+
+function openReport() {
+  const report = currentReport();
+  if (!report) return;
+  const item = report.investigation;
+  $('report-dialog-title').textContent = item ? `Run report · ${item.repository || item.title}` : `Scan report · ${report.scan.repository}`;
+  $('report-dialog-scope').textContent = item
+    ? 'Saved comparison evidence and recorded runner output. Opening this report does not start a new run.'
+    : 'Saved source review. Repository tests were not executed; findings and suggested patches remain unverified.';
+  $('report-dialog-content').textContent = JSON.stringify(report, null, 2);
+  $('report-dialog').showModal();
+  $('report-dialog-close').focus();
 }
 
 function downloadReport() {
-  const item = selectedCase();
-  const scan = selectedScan();
-  if (!item && (!scan?.result || scan.status !== 'completed')) return;
-  const report = item ? { exportedAt: new Date().toISOString(), investigation: item, runs: caseRuns() }
-    : { exportedAt: new Date().toISOString(), type: 'static_source_scan', scan };
+  const report = currentReport();
+  if (!report) return;
   const blob = new Blob([JSON.stringify(report, null, 2) + '\n'], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const anchor = node('a');
   anchor.href = url;
-  anchor.download = `hackday-idea-${item ? item.id : 'repository-scan'}-report.json`;
+  anchor.download = `hackday-idea-${report.investigation ? report.investigation.id : 'repository-scan'}-report.json`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -924,6 +988,9 @@ $('my-repository-select').addEventListener('change', () => {
 });
 $('repository-input').addEventListener('input', clearRepositoryError);
 $('repository-download-button').addEventListener('click', downloadReport);
+$('repository-report-button').addEventListener('click', openReport);
+$('open-report-button').addEventListener('click', openReport);
+$('report-dialog-close').addEventListener('click', () => $('report-dialog').close());
 $('run-button').addEventListener('click', () => startRun());
 $('download-button').addEventListener('click', downloadReport);
 $('copy-patch-button').addEventListener('click', async () => {
@@ -934,7 +1001,11 @@ $('copy-patch-button').addEventListener('click', async () => {
     toast('Patch copied.');
   } catch { toast('Clipboard unavailable. Export the report to save the patch.', true); }
 });
-$('create-pr-button').addEventListener('click', createDraftPullRequest);
+$('create-pr-button').addEventListener('click', createCasePullRequest);
+$('pr-dialog-create').addEventListener('click', publishPullRequest);
+for (const id of ['pr-dialog-close', 'pr-dialog-cancel']) {
+  $(id).addEventListener('click', () => $('pr-dialog').close());
+}
 renderNavigation();
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 1200);

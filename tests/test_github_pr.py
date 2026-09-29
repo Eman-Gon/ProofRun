@@ -69,7 +69,8 @@ def test_create_draft_checks_remote_source_and_uses_bounded_payloads(tmp_path, m
     assert result["url"] == "https://github.com/owner/repo/pull/7"
     payloads = [json.loads(body) for _, body in calls if body]
     assert any(item.get("content") == base64.b64encode(repaired).decode() for item in payloads)
-    assert any(item.get("draft") is True for item in payloads)
+    assert any(item.get("draft") is False for item in payloads)
+    assert result["draft"] is False
     assert all("verified patch" not in json.dumps(item) for item in payloads)
 
 

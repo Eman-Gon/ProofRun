@@ -1,9 +1,10 @@
-"""Draft PRs for reviewed static suggestions, never represented as tested repairs."""
+"""PRs for source-bound review suggestions, never represented as tested repairs."""
 
 import ast
 import base64
 import hashlib
 from pathlib import PurePosixPath
+import re
 from urllib.parse import quote
 
 from .github_pr import PullRequestError, _run, _SHA
@@ -11,9 +12,16 @@ from .public_repo import normalize_repository, _python_findings, MAX_SOURCE_BYTE
 
 
 def can_propose(finding):
-    return (str(finding.get("id", "")).split(":")[0] in {"pandas-hour", "pydantic-optional"}
-            and bool(finding.get("beforeCode")) and bool(finding.get("afterCode"))
-            and len(finding["beforeCode"]) < 1000 and len(finding["afterCode"]) < 1000)
+    if not isinstance(finding, dict):
+        return False
+    before, after = finding.get("beforeCode"), finding.get("afterCode")
+    if (not all(isinstance(value, str) and value and "\x00" not in value
+                and len(value.encode("utf-8")) <= 4000 for value in (before, after))
+            or before == after or type(finding.get("line")) is not int or finding["line"] < 1):
+        return False
+    if finding.get("origin") == "agent":
+        return bool(re.fullmatch(r"[0-9a-f]{64}", str(finding.get("sourceSha256", ""))))
+    return str(finding.get("id", "")).split(":")[0] in {"pandas-hour", "pydantic-optional"}
 
 
 def _content(root, repository, path, revision):
@@ -28,23 +36,33 @@ def _content(root, repository, path, revision):
 
 
 def candidate(original, finding):
-    """Recompute the finding against the pinned source and replace its exact span."""
+    """Recheck the source binding and replace only the reviewed, exact span."""
     try:
         text = original.decode("utf-8-sig")
-        matches = _python_findings(finding["file"], text, [])
-        if not can_propose(finding) or not any(all(row.get(k) == finding.get(k) for k in
-                ("id", "file", "line", "beforeCode", "afterCode")) for row in matches):
+        if not can_propose(finding):
             raise ValueError
+        if finding.get("origin") == "agent":
+            if hashlib.sha256(text.encode("utf-8")).hexdigest() != finding["sourceSha256"]:
+                raise ValueError
+        else:
+            matches = _python_findings(finding["file"], text, [])
+            if not any(all(row.get(k) == finding.get(k) for k in
+                    ("id", "file", "line", "beforeCode", "afterCode")) for row in matches):
+                raise ValueError
         lines = text.splitlines(keepends=True)
         line = finding["line"] - 1
-        start = sum(len(s) for s in lines[:line]) + lines[line].index(finding["beforeCode"].splitlines()[0])
+        first = finding["beforeCode"].splitlines()[0]
+        if not first or lines[line].count(first) != 1:
+            raise ValueError
+        start = sum(len(s) for s in lines[:line]) + lines[line].index(first)
         end = start + len(finding["beforeCode"])
         if text[start:end] != finding["beforeCode"]:
             raise ValueError
         updated = text[:start] + finding["afterCode"] + text[end:]
-        ast.parse(updated)
+        if PurePosixPath(finding["file"]).suffix == ".py":
+            ast.parse(updated)
         return (b"\xef\xbb\xbf" if original.startswith(b"\xef\xbb\xbf") else b"") + updated.encode("utf-8")
-    except (UnicodeError, ValueError, IndexError, KeyError, SyntaxError, RecursionError):
+    except (UnicodeError, ValueError, IndexError, KeyError, TypeError, SyntaxError, RecursionError):
         raise PullRequestError("This suggestion cannot be applied exactly. Run a fresh scan or edit it manually.") from None
 
 
@@ -57,7 +75,7 @@ def create_public_draft(root, scan, finding_index):
         raise PullRequestError("Choose a finding from this scan.")
     finding = findings[finding_index]
     if not can_propose(finding):
-        raise PullRequestError("This finding needs a manual migration; no automatic patch is available.")
+        raise PullRequestError("This finding needs a manual change; no exact patch is available.")
     repository = normalize_repository(result["repository"])
     commit = result.get("commit", "")
     path = finding.get("file", "")
@@ -67,7 +85,7 @@ def create_public_draft(root, scan, finding_index):
         raise PullRequestError("The scan has invalid source coordinates. Scan the repository again.")
     repo = _run(root, ["api", f"repos/{repository}"])
     if repo.get("private") is not False or repo.get("archived") or repo.get("disabled"):
-        raise PullRequestError("Draft PRs require an active public repository.")
+        raise PullRequestError("PRs require an active public repository.")
     base = repo.get("default_branch")
     if not isinstance(base, str) or not base:
         raise PullRequestError("The repository has no default branch.")
@@ -77,7 +95,7 @@ def create_public_draft(root, scan, finding_index):
     branch = "codex/proofrun-" + key
     user = _run(root, ["api", "user"]).get("login")
     if not isinstance(user, str) or not user or "/" in user:
-        raise PullRequestError("Sign in with GitHub CLI before creating a draft PR.")
+        raise PullRequestError("Sign in with GitHub CLI before creating a PR.")
     writable = repo.get("permissions", {}).get("push") is True
     destination = repository if writable else f"{user}/{repository.split('/')[1]}"
     head = destination.split('/')[0] + ":" + branch
@@ -112,16 +130,21 @@ def create_public_draft(root, scan, finding_index):
     branch_bytes, branch_blob = _content(root, destination, path, branch)
     if branch_bytes == original:
         _run(root, ["api", "--method", "PUT", f"repos/{destination}/contents/{quote(path, safe='/')}", "--input", "-"],
-             payload={"message": "fix: propose dependency migration", "content": base64.b64encode(repaired).decode(),
+             payload={"message": "fix: apply reviewed source suggestion", "content": base64.b64encode(repaired).decode(),
                       "branch": branch, "sha": branch_blob})
     elif branch_bytes != repaired:
         raise PullRequestError("The proposal branch was modified. Review it on GitHub before retrying.")
+    validation = ("The proposed Python source parses successfully. " if PurePosixPath(path).suffix == ".py"
+                  else "Syntax and runtime behavior have not been checked. ")
+    reproduction = finding.get("reproduction")
+    check = f"\n\nSuggested validation (not executed):\n{reproduction}" if reproduction else ""
+    title = " ".join(str(finding.get("title") or "Review source fix").split())[:180]
     pull = _run(root, ["api", "--method", "POST", f"repos/{repository}/pulls", "--input", "-"], payload={
-        "title": "Propose " + finding["package"] + " migration fix", "head": head, "base": base, "draft": True,
-        "body": (f"Static migration suggestion for `{path}:{finding['line']}` at `{commit}`.\n\n"
+        "title": title, "head": head, "base": base, "draft": False,
+        "body": (f"Source review suggestion for `{path}:{finding['line']}` at `{commit}`.\n\n"
                  "**Unverified proposal:** repository tests were not run; a regression or successful repair has not been established. "
-                 "The proposed Python source parses successfully. Review the intended behavior and run the repository's tests before merging.\n\n"
-                 f"{finding['explanation']}\n\nReference: {finding['sourceUrl']}")})
+                 f"{validation}Review the intended behavior and run the repository's tests before merging.\n\n"
+                 f"{finding['explanation']}{check}\n\nReference: {finding['sourceUrl']}")})
     return _result(pull, repository, branch)
 
 
@@ -130,4 +153,4 @@ def _result(pull, repository, branch):
     if type(number) is not int or pull.get("html_url") != f"https://github.com/{repository}/pull/{number}":
         raise PullRequestError("GitHub returned an unexpected PR response. Check GitHub before retrying.")
     return {"url": pull["html_url"], "number": number, "repository": repository,
-            "branch": branch, "draft": pull.get("draft", True)}
+            "branch": branch, "draft": pull.get("draft", False)}

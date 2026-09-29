@@ -186,11 +186,33 @@ class PublicRepoTests(unittest.TestCase):
 
     def test_unsupported_and_malformed_manifests_are_explicit(self):
         files, warnings = read({"snapshot/yarn.lock": "opaque", "snapshot/package-lock.json": "{}"})
-        self.assertEqual(files, {})
-        self.assertTrue(any("Lockfiles" in warning for warning in warnings))
+        self.assertEqual(set(files), {"yarn.lock", "package-lock.json"})
+        deps, _, warnings = scan(files)
+        self.assertFalse(deps)
+        self.assertTrue(any("not supported" in warning for warning in warnings))
+        self.assertTrue(any("lockfile version" in warning for warning in warnings))
         deps, _, warnings = scan({"package.json": "broken", "pyproject.toml": '[tool.poetry.dependencies]\npython = "^3.11"\npandas = "*"\n'})
         self.assertFalse(deps)
         self.assertEqual(len(warnings), 2)
+
+    def test_cross_language_sources_and_real_lockfiles_are_discovered(self):
+        files, warnings = read({
+            "snapshot/service/main.go": "package main\n", "snapshot/crate/src/lib.rs": "pub fn answer() {}",
+            "snapshot/app.java": "class App {}", "snapshot/index.php": "<?php echo 1;",
+            "snapshot/Cargo.toml": '[dependencies]\nserde="1"\n',
+            "snapshot/api/go.mod": "module example.org/app\nrequire example.org/library v1.2.3\n",
+            "snapshot/web/composer.json": '{"require":{"vendor/library":"^2"}}',
+            "snapshot/README.md": "# Project", "snapshot/.env": "SECRET=value",
+            "snapshot/node_modules/library/index.js": "generated();",
+            "snapshot/service/uv.lock": '[[package]]\nname="any-package"\nversion="3.1"\n',
+        })
+        self.assertFalse(warnings)
+        self.assertNotIn(".env", files)
+        self.assertEqual(len(files), 9)
+        deps, _, warnings = scan(files)
+        self.assertFalse(warnings)
+        self.assertEqual({(row["name"], row["ecosystem"]) for row in deps}, {
+            ("serde", "cargo"), ("example.org/library", "golang"), ("vendor/library", "packagist"), ("any-package", "pypi")})
 
     def test_pandas_calls_require_real_import_not_name_or_comment(self):
         _, findings, _ = scan({"app.py": '''import pandas as pd
@@ -260,13 +282,14 @@ import { getLCP } from 'other-library';
             if len(urls) == 2:
                 return json.dumps({"sha": SHA}).encode()
             return source
-        with patch.object(public, "_fetch", fetch):
+        with patch.object(public, "_fetch", fetch), patch.dict("os.environ", {}, clear=True):
             result = public.inspect_public_repo("owner/repo", emit=messages.append)
         self.assertTrue(urls[1].endswith("/commits/feature%2Fmain"))
         self.assertEqual(urls[2], f"https://codeload.github.com/Owner/Repo/tar.gz/{SHA}")
         self.assertEqual(result["commit"], SHA)
         self.assertEqual(result["filesScanned"], 1)
         self.assertEqual(result["findings"][0]["status"], "static_unverified")
+        self.assertEqual(result["review"]["status"], "unavailable")
         self.assertIn("No findings does not establish", result["scope"])
         self.assertEqual(len(messages), 3)
 

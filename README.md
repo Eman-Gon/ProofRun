@@ -152,26 +152,42 @@ The commands above exercise the registered Python/Pydantic fixture. The separate
 ## Local dashboard
 
 Start the local dashboard with `python3.12 -m src.dashboard` and open
-`http://localhost:8765`. It provides saved source scans and prepared Docker
+`http://localhost:8765`. Its entry point loads the main ignored `.env` without
+overriding exported settings; `--env-file` selects a different file. Set
+`OPENROUTER_API_KEY` and `PROOFRUN_MODEL` there for agent repository review.
+It provides public source reviews, saved source scans and prepared Docker
 comparisons. The former source-research and memory integrations, their live
 investigation button, and the dependent `ingest`/`check` CLI commands have been
 removed. `python3.12 -m src.main upgrade-demo --offline` remains available;
 its saved evidence is local. The current sponsor workflow uses the separate
 ProofRun worker and DuploCloud extension described above.
 
+Each public check discovers dependencies from the snapshot, then lets the agent
+choose files, search source, inspect tests and propose concrete correctness
+issues. Review is bounded to 12 decisions and 65 seconds within the scan's
+90-second budget. The report shows the actual files read and whether review
+completed, stopped early or lacked model access. Auxiliary migration patterns
+remain labeled separately; missing model access never becomes a clean review.
+Python/npm, Cargo, Go and Composer manifests and supported lockfiles are parsed;
+other formats and truncated archives are reported as coverage limits. A scan
+does not execute the repository or prove its tests pass.
+
 After a fixture repair passes both pinned environments, the dashboard can create
-a draft GitHub pull request. The action requires an authenticated `gh` CLI and a
+a GitHub pull request. The action requires an authenticated `gh` CLI and a
 GitHub `origin`. Before publishing, it rechecks the latest report hashes and the
 default-branch file contents against the exact tested source. The browser asks
-for confirmation, then creates a `codex/` branch containing only the verified
-application-file change. Stale or incomplete evidence cannot publish a PR.
+for confirmation in a fixed overlay with the patch, then creates a `codex/`
+branch containing only the verified application-file change. Stale or
+incomplete evidence cannot publish a PR.
 
-Public repository scans also show **Create draft PR** beside supported pandas
-hourly-frequency and Pydantic nullable-default suggestions. This works across
-public repositories, targeting the scanned repository and using a public fork
+Public repository scans also show **Create PR** beside source-bound agent
+suggestions with an exact replacement, and supported migration suggestions.
+This targets the scanned repository and uses a public fork
 when the signed-in GitHub CLI account lacks push permission. GitHub permissions
-and repository policies still apply. These drafts explicitly state that tests
+and repository policies still apply. These PRs explicitly state that tests
 were not run; they are review proposals, not verified repairs. The source is
 rechecked at the scanned revision and the default branch must still match it.
+Agent patches must match the hash of the inspected source and the exact reported
+line span; Python replacements must parse. Other languages are not syntax-checked.
 Retries reuse the proposal branch/PR. Findings without an automatic patch show
 an explanation, and saved examples require a fresh scan before publication.

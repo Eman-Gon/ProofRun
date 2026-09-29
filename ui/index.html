@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f8f5">
-  <title>Hackday Idea — dependency checks</title>
+  <title>Hackday Idea — repository checks</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23222c22'/%3E%3Cpath d='M10 15h15l-5-5m10 15H15l5 5' fill='none' stroke='%23c8f58d' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
   <script src="/graph.js" defer></script>
@@ -24,7 +24,7 @@
   <div class="page">
     <header class="page-header">
       <div class="brand"><span class="brand-symbol" aria-hidden="true">⇄</span><h1>Hackday Idea</h1></div>
-      <p>Check what breaks when a dependency changes.</p>
+      <p>Review repository issues and inspect the evidence behind a suggested fix.</p>
     </header>
     <main id="main" tabindex="-1">
       <div id="connection-error" class="error-banner" role="alert" hidden></div>
@@ -57,7 +57,7 @@
           <button class="button primary" id="repository-button" type="submit" disabled>Check repository</button>
         </div>
         <p class="entry-note" id="repository-list-status" role="status" hidden></p>
-        <p class="entry-note" id="repository-note">Choose one of your public repositories to check for supported dependency upgrade patterns. Repository code is not executed.</p>
+        <p class="entry-note" id="repository-note">Choose a public repository for source review and dependency discovery. Repository code is not executed.</p>
         <p class="entry-status" id="repository-status" role="status" hidden></p>
         <p class="entry-error" id="repository-error" role="alert" hidden></p>
       </form>
@@ -72,7 +72,7 @@
       </section>
       <div class="project-controls">
         <div class="project-field"><label for="project-select">Saved scans &amp; prepared comparisons</label><select id="project-select" disabled><option>Loading saved checks…</option></select></div>
-        <button class="button primary" id="run-button" disabled>Run comparison</button>
+        <button class="button secondary" id="run-button" disabled>Run prepared comparison</button>
       </div>
       <p class="controls-note" id="run-note">Prepared comparisons run locally in Docker.</p>
       <div id="loading" class="loading-state" role="status">Loading saved results…</div>
@@ -86,6 +86,7 @@
           <h2 id="repository-title"></h2>
           <p class="case-summary" id="repository-summary" role="status"></p>
           <p class="scan-boundary" id="repository-boundary">These are source and manifest checks. Tests have not been run, and upgrade compatibility has not been verified.</p>
+          <p class="review-status" id="repository-review-status" role="status" hidden></p>
           <section class="result-explanation" id="repository-explanation" aria-labelledby="repository-explanation-title" hidden>
             <h3 id="repository-explanation-title">What this means</h3>
             <p id="repository-explanation-summary"></p>
@@ -99,7 +100,7 @@
             <details class="disclosure" id="repository-output-details" hidden><summary>Scan output</summary><div class="disclosure-content"><pre id="repository-output"></pre></div></details>
           </div>
         </section>
-        <footer class="result-footer"><span id="repository-saved-status"></span><button class="text-button" id="repository-download-button" disabled>Export scan</button></footer>
+        <footer class="result-footer"><span id="repository-saved-status"></span><div class="report-actions"><button class="text-button" id="repository-report-button" disabled>Open scan report</button><button class="text-button" id="repository-download-button" disabled>Export scan</button></div></footer>
       </div>
       <div id="case-content" hidden>
         <section class="result-card" aria-labelledby="case-title">
@@ -108,7 +109,7 @@
           <p id="case-summary" class="case-summary"></p>
           <div class="table-wrapper"><table class="comparison-table"><caption class="sr-only">Test results before and after the dependency upgrade</caption><thead><tr><th scope="col">Check</th><th scope="col"><span id="table-old"></span><small>Before</small></th><th scope="col"><span id="table-new"></span><small>After</small></th></tr></thead><tbody id="comparison-body"></tbody></table></div>
           <section class="fix-section" aria-labelledby="fix-title">
-            <div class="section-heading"><h3 id="fix-title">Suggested fix</h3><div class="fix-actions"><button class="button secondary compact" id="copy-patch-button">Copy patch</button><button class="button primary compact" id="create-pr-button" hidden>Create draft PR</button></div></div>
+            <div class="section-heading"><h3 id="fix-title">Suggested fix</h3><div class="fix-actions"><button class="button secondary compact" id="copy-patch-button">Copy patch</button><button class="button primary compact" id="create-pr-button" hidden>Create PR</button></div></div>
             <p id="fix-description"></p>
             <div class="diff-card"><div class="diff-header"><span id="fix-path"></span><span id="fix-lines"></span></div><div class="diff-code"><div class="diff-line removed"><span aria-label="Remove">−</span><code id="before-code"></code></div><div class="diff-line added"><span aria-label="Add">+</span><code id="after-code"></code></div></div></div>
             <p id="fix-verification" class="fix-note"></p>
@@ -121,15 +122,31 @@
             <details class="disclosure" id="history-details"><summary>Recent runs <span id="run-count" class="muted"></span></summary><div id="history-list" class="disclosure-content"></div></details>
           </div>
         </section>
-        <footer class="result-footer"><span id="saved-status"></span><button class="text-button" id="download-button">Export report</button></footer>
+        <footer class="result-footer"><span id="saved-status"></span><div class="report-actions"><button class="text-button" id="open-report-button">Open run report</button><button class="text-button" id="download-button">Export report</button></div></footer>
       </div>
       </div>
     </main>
   </div>
   </div>
+  <dialog id="pr-dialog" class="overlay-dialog" aria-labelledby="pr-dialog-title" aria-describedby="pr-dialog-summary pr-dialog-evidence">
+    <div class="dialog-heading"><h2 id="pr-dialog-title">Create pull request</h2><button class="button secondary compact" id="pr-dialog-close" type="button" aria-label="Close pull request preview">Close</button></div>
+    <p id="pr-dialog-summary"></p>
+    <p id="pr-dialog-evidence" class="dialog-evidence"></p>
+    <p id="pr-dialog-revision" class="muted"></p>
+    <div class="dialog-patch"><h3 id="pr-dialog-path"></h3><pre id="pr-dialog-patch" tabindex="0" aria-label="Proposed patch"></pre></div>
+    <p class="dialog-note">Creates a branch and pull request on GitHub. A public fork is used if needed. You can review and edit the PR before merging.</p>
+    <p id="pr-dialog-error" class="entry-error" role="alert" hidden></p>
+    <p id="pr-dialog-status" class="entry-status" role="status" hidden></p>
+    <div class="dialog-actions"><button class="button secondary" id="pr-dialog-cancel" type="button">Cancel</button><button class="button primary" id="pr-dialog-create" type="button">Create PR</button></div>
+  </dialog>
+  <dialog id="report-dialog" class="overlay-dialog report-dialog" aria-labelledby="report-dialog-title" aria-describedby="report-dialog-scope">
+    <div class="dialog-heading"><h2 id="report-dialog-title">Run report</h2><button class="button secondary compact" id="report-dialog-close" type="button">Close</button></div>
+    <p id="report-dialog-scope" class="dialog-evidence"></p>
+    <pre id="report-dialog-content" tabindex="0" aria-label="Saved report data"></pre>
+  </dialog>
   <aside id="pr-progress" class="pr-progress" aria-label="Pull request creation" aria-busy="true" hidden>
     <span class="pr-spinner" aria-hidden="true"></span>
-    <div><strong id="pr-progress-title" role="status" aria-live="polite">Creating draft PR…</strong>
+    <div><strong id="pr-progress-title" role="status" aria-live="polite">Creating PR…</strong>
       <p id="pr-progress-detail"></p>
       <p class="pr-progress-note">You can browse other results while this finishes.</p></div>
     <span id="pr-progress-time" aria-label="Elapsed time"></span>

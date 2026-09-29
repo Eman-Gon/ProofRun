@@ -1,4 +1,4 @@
-"""Publish one verified ProofRun fixture repair as a GitHub draft PR."""
+"""Publish one verified ProofRun fixture repair as a GitHub PR."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def _run(root: Path, arguments: list[str], *, payload: dict | None = None) -> di
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise PullRequestError("GitHub CLI is unavailable or timed out.") from exc
     if result.returncode != 0:
-        raise PullRequestError("GitHub rejected the draft PR request. Check authentication and repository access.")
+        raise PullRequestError("GitHub rejected the PR request. Check authentication and repository access.")
     try:
         value = json.loads(result.stdout)
     except (json.JSONDecodeError, TypeError):
@@ -136,7 +136,7 @@ def create_draft(root: Path, case: dict, report_path: Path | None) -> dict:
             "title": "Fix omitted nickname behavior after Pydantic upgrade",
             "head": branch,
             "base": base,
-            "draft": True,
+            "draft": False,
             "body": (
                 "ProofRun reproduced the omitted-nickname regression between Pydantic 1.10.18 and 2.8.2.\n\n"
                 "This adds the explicit `None` default verified by the original suite, the targeted omission check, "
@@ -154,4 +154,4 @@ def create_draft(root: Path, case: dict, report_path: Path | None) -> dict:
     number = pull.get("number")
     if not isinstance(url, str) or not url.startswith(f"https://github.com/{repository}/pull/") or type(number) is not int:
         raise PullRequestError("GitHub created the PR but returned an invalid result.")
-    return {"url": url, "number": number, "repository": repository, "branch": branch, "draft": True}
+    return {"url": url, "number": number, "repository": repository, "branch": branch, "draft": pull.get("draft", False)}

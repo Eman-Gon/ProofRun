@@ -19,12 +19,12 @@ import time
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv
 
 from .public_repo import PublicRepoError, inspect_public_repo, list_public_repositories, normalize_owner, normalize_repository
 from .result_explanation import explain_public_result
 from .demo_ready import load_demo_ready
-from .github_pr import PullRequestError, create_draft, eligible as pr_eligible
+from .github_pr import PullRequestError, create_draft, eligible as pr_eligible, _repository as pr_repository
 from .public_pr import create_public_draft
 from .dashboard_band import band_observation
 
@@ -279,6 +279,11 @@ class Dashboard:
         allowed, reason = pr_eligible(self.root, case, path if report else None)
         case["pullRequest"] = {"eligible": allowed, "reason": reason,
                                "result": self.pull_requests.get(case_id)}
+        if allowed:
+            try:
+                case["pullRequest"]["repository"] = pr_repository(self.root)
+            except PullRequestError as error:
+                case["pullRequest"].update(eligible=False, reason=str(error))
         required = [".commit-watch/repo-audit/gpu-energy-pandas/" + name for name in ("reproduce.py", "data_collection.py", "fixed_data_collection.py", "test_collection.py")] if gpu else ["src/main.py", "demo/upgrade/app.py", "demo/upgrade/fixed_app.py", "demo/upgrade/requirements-old.txt", "demo/upgrade/requirements-new.txt"]
         if not all((self.root / name).is_file() for name in required):
             case["unavailableReason"] = "The local reproduction files are missing."
@@ -294,7 +299,7 @@ class Dashboard:
         if scan is None:
             return 404, {"error": "Scan not found. Check this public repository again."}
         if not self.public_pr_lock.acquire(blocking=False):
-            return 409, {"error": "A draft PR request is already in progress. Please wait."}
+            return 409, {"error": "A PR request is already in progress. Please wait."}
         try:
             result = create_public_draft(self.root, scan, finding_index)
             with self.lock:
@@ -606,9 +611,12 @@ def make_server(root=ROOT, port=8765):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--env-file", type=Path, default=ROOT / ".env",
+                        help="Server-side model configuration (defaults to the main .env).")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
+    load_dotenv(args.env_file, override=False, interpolate=False)
     server = make_server(port=args.port)
     print(f"Hackday Idea dashboard: http://127.0.0.1:{server.server_port}", flush=True)
     try:

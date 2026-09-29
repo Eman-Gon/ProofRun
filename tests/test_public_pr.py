@@ -1,12 +1,13 @@
 import base64
 import copy
+import hashlib
 import http.client
 import json
 import threading
 
 import pytest
 
-from src.public_pr import candidate, create_public_draft, PullRequestError
+from src.public_pr import candidate, can_propose, create_public_draft, PullRequestError
 from src.public_repo import _python_findings
 from src.dashboard import Dashboard, make_server
 
@@ -22,9 +23,10 @@ def scan():
     }}
 
 
-def fake_github(monkeypatch, *, push=True, stale=False, existing=False, changed_branch=False):
+def fake_github(monkeypatch, *, push=True, stale=False, existing=False, changed_branch=False,
+                source=SOURCE, selected_scan=None):
     calls = []
-    repaired = candidate(SOURCE, scan()['result']['findings'][0])
+    repaired = candidate(source, (selected_scan or scan())['result']['findings'][0])
 
     def run(root, args, *, payload=None):
         calls.append((args, payload))
@@ -47,9 +49,9 @@ def fake_github(monkeypatch, *, push=True, stale=False, existing=False, changed_
         if '/commits/' in endpoint:
             return {'parents': [{'sha': COMMIT}], 'files': [{'filename': 'unrelated.py'}]}
         if '/contents/' in endpoint and payload is None:
-            return {'type': 'file', 'sha': 'b' * 40, 'content': base64.b64encode(SOURCE).decode()}
+            return {'type': 'file', 'sha': 'b' * 40, 'content': base64.b64encode(source).decode()}
         if endpoint.endswith('/pulls'):
-            return {'html_url': 'https://github.com/other/public-project/pull/7', 'number': 7, 'draft': True}
+            return {'html_url': 'https://github.com/other/public-project/pull/7', 'number': 7, 'draft': False}
         return {}
 
     monkeypatch.setattr('src.public_pr._run', run)
@@ -67,7 +69,8 @@ def test_public_repository_pr_targets_scanned_repository(tmp_path, monkeypatch, 
     destination = 'other' if push else 'writer'
     assert f'repos/{destination}/public-project/contents/src/customer.py' in updates[0][0]
     pr = next(body for args, body in calls if body and 'draft' in body)
-    assert pr['draft'] is True
+    assert pr['draft'] is False
+    assert result['draft'] is False
     assert pr['head'].startswith(destination + ':codex/proofrun-')
     assert 'tests were not run' in pr['body']
     assert bool([args for args, _ in calls if any(x.endswith('/forks') for x in args)]) == (not push)
@@ -106,6 +109,61 @@ def test_pandas_candidate_preserves_other_calls():
     source = b'import pandas as pd\nx = pd.date_range("2024", periods=2, freq="H")\ny = "H"\n'
     finding = _python_findings('app.py', source.decode(), [])[0]
     assert candidate(source, finding) == source.replace(b'freq="H"', b"freq='h'")
+
+
+def agent_finding(source, path='src/total.ts', **changes):
+    return {'id': 'agent-review:abc', 'origin': 'agent', 'status': 'static_unverified',
+            'sourceSha256': hashlib.sha256(source.decode('utf-8-sig').encode()).hexdigest(),
+            'title': 'Preserve a zero total', 'file': path, 'line': 2, 'package': '',
+            'beforeCode': 'return total || fallback;', 'afterCode': 'return total ?? fallback;',
+            'explanation': 'A zero total takes the fallback branch.',
+            'sourceUrl': f'https://github.com/other/public-project/blob/{COMMIT}/{path}#L2',
+            'reproduction': 'Assert that total=0 returns zero.', **changes}
+
+
+def test_agent_patch_publishes_non_draft_pr_without_package_allowlist(tmp_path, monkeypatch):
+    source = b'export function value(total, fallback) {\n  return total || fallback;\n}\n'
+    selected = scan()
+    selected['result']['findings'] = [agent_finding(source)]
+    calls, repaired = fake_github(monkeypatch, source=source, selected_scan=selected)
+    result = create_public_draft(tmp_path, selected, 0)
+    assert repaired == source.replace(b'||', b'??')
+    assert result['draft'] is False
+    pr = next(body for _, body in calls if body and 'draft' in body)
+    assert pr['title'] == 'Preserve a zero total'
+    assert 'tests were not run' in pr['body']
+    assert 'Python source parses' not in pr['body']
+    assert 'Suggested validation (not executed)' in pr['body']
+
+
+@pytest.mark.parametrize('changes', [
+    {'sourceSha256': '0' * 64}, {'line': 1}, {'line': 0}, {'line': True},
+    {'beforeCode': 'not in the source'}, {'afterCode': 'return total || fallback;'},
+    {'afterCode': '\x00'}, {'afterCode': 'é' * 2001},
+])
+def test_agent_patch_rejects_changed_source_or_inexact_span(changes):
+    source = b'function value(total, fallback) {\n  return total || fallback;\n}\n'
+    with pytest.raises(PullRequestError, match='applied exactly'):
+        candidate(source, agent_finding(source, **changes))
+
+
+def test_agent_patch_preserves_utf8_bom_crlf_and_rejects_ambiguous_span():
+    source = b'\xef\xbb\xbffunction value(total, fallback) {\r\n  return total || fallback;\r\n}\r\n'
+    assert candidate(source, agent_finding(source)) == source.replace(b'||', b'??')
+    repeated = b'// first\nreturn total || fallback; return total || fallback;\n'
+    with pytest.raises(PullRequestError):
+        candidate(repeated, agent_finding(repeated))
+
+
+def test_agent_python_patch_must_parse_and_changed_original_is_rejected():
+    source = b'def first(xs):\n    return xs[1]\n'
+    finding = agent_finding(source, path='src/first.py', beforeCode='return xs[1]', afterCode='return xs[0]')
+    assert candidate(source, finding) == source.replace(b'xs[1]', b'xs[0]')
+    with pytest.raises(PullRequestError):
+        candidate(source + b'# changed\n', finding)
+    with pytest.raises(PullRequestError):
+        candidate(source, {**finding, 'afterCode': 'return xs['})
+    assert not can_propose({**finding, 'origin': 'unknown'})
 
 
 @pytest.mark.parametrize('index', [-1, True, 5])

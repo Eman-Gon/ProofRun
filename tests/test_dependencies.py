@@ -5,6 +5,26 @@ from src.dependencies import DependencyParseError, MAX_DEPENDENCY_BYTES, changed
 
 
 class DependencyTests(unittest.TestCase):
+    def test_cross_ecosystem_declared_versions_follow_each_snapshot(self):
+        fixtures = [
+            ("services/go.mod", "require example.org/tool v1.0.0\n", "v1.0.0", "v1.1.0", "golang", "example.org/tool"),
+            ("lib/Cargo.toml", '[dependencies]\nalias={package="actual-crate",version="1.0"}\n', "1.0", "1.1", "cargo", "actual-crate"),
+            ("web/composer.json", '{"require":{"vendor/tool":"^1.0","php":">=8"}}', "^1.0", "^1.1", "packagist", "vendor/tool"),
+        ]
+        for path, body, old, new, ecosystem, name in fixtures:
+            with self.subTest(path=path):
+                rows = changed_dependencies(path, body, body.replace(old, new))
+                self.assertEqual(rows, [{"ecosystem": ecosystem, "package": name, "before": old, "version": new}])
+
+    def test_lock_and_workspace_dependencies_exclude_local_sources(self):
+        cargo = '[workspace.dependencies]\nserde="1"\n[dependencies]\nlocal={path="../local"}\nshared={workspace=true}\n[target.\'cfg(unix)\'.dependencies]\nlibc="0.2"\n'
+        self.assertEqual({row["package"] for row in changed_dependencies("Cargo.toml", None, cargo)}, {"serde", "libc"})
+        lock = '[[package]]\nname="serde"\nversion="1.2.3"\nsource="registry+https://registry.example"\n[[package]]\nname="local"\nversion="9"\n'
+        self.assertEqual([row["package"] for row in changed_dependencies("Cargo.lock", None, lock)], ["serde"])
+        go = 'module example.org/app\nrequire (\nexample.org/a v1.0.0 // indirect\nexample.org/local v2.0.0\n)\nreplace example.org/local => ../local\n'
+        self.assertEqual([row["package"] for row in changed_dependencies("go.mod", None, go)], ["example.org/a"])
+        self.assertEqual(changed_dependencies("go.sum", None, "example.org/a v1.0.0/go.mod h1:abc\n")[0]["version"], "v1.0.0")
+
     def test_recognizes_only_dependency_filenames(self):
         for path in ("frontend/package.json", "npm-shrinkwrap.json", "requirements-dev.txt",
                      "backend/requirements/base.txt", "pyproject.toml", "poetry.lock", "uv.lock",

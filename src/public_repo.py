@@ -18,6 +18,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 from .dependencies import DependencyParseError, changed_dependencies, is_dependency_file
 from .result_explanation import explain_public_result
+from .repository_review import review_repository
 
 MAX_ARCHIVE_BYTES = 20 * 1024 * 1024
 MAX_EXPANDED_BYTES = 50 * 1024 * 1024
@@ -34,7 +35,16 @@ REPOSITORY_PAGE_SIZE = 100
 REPOSITORY_LIST_SECONDS = 8
 _ALLOWED_HOSTS = {"api.github.com", "codeload.github.com"}
 _IGNORED_DIRS = {".git", "node_modules", ".venv", "venv", "vendor", "dist", "build", ".next", "__pycache__", "coverage"}
-_SOURCE_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
+_JAVASCRIPT_SUFFIXES = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
+_SOURCE_SUFFIXES = _JAVASCRIPT_SUFFIXES | {
+    ".py", ".go", ".rs", ".java", ".kt", ".kts", ".cs", ".fs", ".fsx", ".vb",
+    ".c", ".h", ".cc", ".cpp", ".hpp", ".m", ".mm", ".swift", ".rb", ".php",
+    ".ex", ".exs", ".erl", ".hrl", ".hs", ".scala", ".sc", ".clj", ".cljs",
+    ".lua", ".pl", ".r", ".jl", ".dart", ".vue", ".svelte", ".html", ".css",
+    ".scss", ".sql", ".sh", ".bash", ".zsh", ".ps1", ".yaml", ".yml", ".toml",
+    ".json", ".xml", ".tf", ".hcl", ".md", ".rst", ".proto", ".graphql",
+}
+_SOURCE_NAMES = {"dockerfile", "makefile", "cmakelists.txt", "readme", "license"}
 PANDAS_SOURCE = "https://pandas.pydata.org/docs/whatsnew/v3.0.0.html#enforced-deprecations"
 PYDANTIC_SOURCE = "https://docs.pydantic.dev/latest/migration/#required-optional-and-nullable-fields"
 WEB_VITALS_SOURCE = "https://github.com/GoogleChrome/web-vitals/blob/main/docs/upgrading-to-v4.md"
@@ -227,8 +237,7 @@ def _warn(warnings, message):
 
 
 def _manifest(path):
-    name = PurePosixPath(path).name.lower()
-    return name in {"package.json", "pyproject.toml"} or (name.endswith(".txt") and is_dependency_file(path))
+    return is_dependency_file(path)
 
 
 def _archive_files(data, budget, warnings):
@@ -263,9 +272,11 @@ def _archive_files(data, budget, warnings):
                     if any(part in _IGNORED_DIRS for part in parts[1:-1]):
                         continue
                     supported = _manifest(path)
-                    if is_dependency_file(path) and not supported:
-                        _warn(warnings, "Lockfiles are not parsed by this inspector; dependency versions are manifest declarations only.")
-                    if not supported and PurePosixPath(path).suffix.lower() not in _SOURCE_SUFFIXES:
+                    name = PurePosixPath(path).name.lower()
+                    if (name.startswith(".env") or name in {"credentials.json", "secrets.json", "service-account.json"}
+                            or name.endswith((".min.js", ".min.css"))):
+                        continue
+                    if not supported and PurePosixPath(path).suffix.lower() not in _SOURCE_SUFFIXES and name not in _SOURCE_NAMES:
                         continue
                     if member.size > MAX_SOURCE_BYTES:
                         _warn(warnings, "Source or manifest files above 128 KB were skipped; inspection is partial.")
@@ -297,7 +308,7 @@ def _archive_files(data, budget, warnings):
 
 
 def _finding(rule, package, path, line, title, before, after, explanation, source):
-    return {"id": f"{rule}:{path}:{line}", "status": "static_unverified", "title": title,
+    return {"id": f"{rule}:{path}:{line}", "status": "static_unverified", "origin": "pattern", "title": title,
             "package": package, "file": path, "line": line, "beforeCode": before[:1000],
             "afterCode": after[:1000], "explanation": explanation, "sourceUrl": source}
 
@@ -443,7 +454,7 @@ def _scan_files(files, budget, warnings):
         suffix = PurePosixPath(path).suffix.lower()
         if suffix == ".py":
             found = _python_findings(path, text, warnings)
-        elif suffix in _SOURCE_SUFFIXES:
+        elif suffix in _JAVASCRIPT_SUFFIXES:
             found = _javascript_findings(path, text)
         else:
             continue
@@ -476,19 +487,29 @@ def inspect_public_repo(value, emit=None, cancelled=None) -> dict:
     data = _fetch(f"https://codeload.github.com/{repository}/tar.gz/{commit}", MAX_ARCHIVE_BYTES, budget)
     warnings = []
     files = _archive_files(data, budget, warnings)
-    say(f"Checking {len(files)} source and manifest files for three supported migration patterns…")
+    say(f"Discovering dependencies and reviewing {len(files)} source, configuration, and manifest files…")
     dependencies, findings = _scan_files(files, budget, warnings)
+    agent_findings, review = review_repository(files, repository, commit, deadline=budget.deadline,
+                                               emit=say, cancelled=cancelled)
+    # General review comes first; legacy migration hints remain visibly static
+    # and are never substituted for a completed model review.
+    agent_locations = {(row["file"], row["line"]) for row in agent_findings}
+    findings = agent_findings + [row for row in findings if (row["file"], row["line"]) not in agent_locations]
+    if review["status"] != "completed":
+        _warn(warnings, review["summary"])
     if not dependencies:
         _warn(warnings, "No supported registry dependency declarations were found; installed versions are unknown.")
-    scope = ("Static, unverified inspection of one public default-branch commit. No repository code, tests, installs, or AI services were run. "
-             "Checks cover imported pandas date_range/timedelta_range freq='H', directly imported Pydantic BaseModel nullable fields without defaults, "
-             "and explicit legacy web-vitals imports/destructuring. Dependency declarations come only from package.json, requirements text files, and supported "
-             "PEP 621 pyproject.toml fields; lockfiles, setup.py, notebooks, dynamic imports, indirect inheritance, and general API compatibility are not analyzed. "
-             "Local/git/URL dependencies are omitted. At most 300 UTF-8 files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. "
-             "No findings does not establish upgrade compatibility. Proposed changes are suggestions only and are not applied.")
+    scope = ("Bounded source review of one public default-branch commit. The agent selects source reads and literal searches to investigate potential "
+             "correctness issues across languages; review status and filesRead record the actual coverage. Findings require exact read-source excerpts "
+             "and remain unverified. No repository code, tests, or installs were run. Existing migration patterns are separate auxiliary hints. "
+             "Registry declarations are parsed from supported Python/npm, Cargo, Go, and Composer manifests and lockfiles; unsupported formats are reported. "
+             "Local/git/URL dependencies are omitted. Lockfile entries may be transitive, and Go checksums do not establish selected or installed versions. "
+             "At most 300 UTF-8 source/configuration/documentation files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. "
+             "Agent review is limited to 12 decisions and 65 seconds within the scan deadline. No findings does not establish correctness or upgrade compatibility. "
+             "Proposed changes are suggestions only and are not applied.")
     budget.check()
     result = {"repository": repository, "repoUrl": f"https://github.com/{repository}", "commit": commit,
             "checkedAt": datetime.now(timezone.utc).isoformat(), "dependencies": dependencies,
-            "findings": findings, "filesScanned": len(files), "scope": scope, "warnings": warnings}
+            "findings": findings, "filesScanned": len(files), "scope": scope, "warnings": warnings, "review": review}
     result["explanation"] = explain_public_result(result)
     return result

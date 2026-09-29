@@ -12,7 +12,9 @@ from packaging.utils import canonicalize_name
 MAX_DEPENDENCY_BYTES = 256 * 1024
 _NPM_SECTIONS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
 _LOCKS = {"package-lock.json", "npm-shrinkwrap.json", "poetry.lock", "uv.lock", "pipfile.lock"}
-_UNSUPPORTED = {"yarn.lock", "pnpm-lock.yaml"}
+_EXTRA = {"cargo.toml", "cargo.lock", "go.mod", "go.sum", "composer.json", "composer.lock"}
+_UNSUPPORTED = {"yarn.lock", "pnpm-lock.yaml", "pom.xml", "build.gradle", "build.gradle.kts",
+                "gemfile", "gemfile.lock", "pipfile", "setup.py", "setup.cfg", "packages.config"}
 
 
 class DependencyParseError(ValueError):
@@ -22,7 +24,7 @@ class DependencyParseError(ValueError):
 def is_dependency_file(path: str) -> bool:
     parts = PurePosixPath(path.lower()).parts
     name = parts[-1] if parts else ""
-    return name in _LOCKS | _UNSUPPORTED | {"package.json", "pyproject.toml"} or (
+    return name in _LOCKS | _EXTRA | _UNSUPPORTED | {"package.json", "pyproject.toml"} or name.endswith((".csproj", ".fsproj")) or (
         name.endswith(".txt") and (name.startswith("requirements") or "requirements" in parts[:-1])
     )
 
@@ -68,8 +70,10 @@ def _add(result, ecosystem, name, spec):
         if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?", name):
             raise DependencyParseError("Invalid Python dependency name.")
         name = str(canonicalize_name(name))
-    elif not re.fullmatch(r"(?:@[a-z0-9._-]+/)?[a-z0-9._-]+", name) or len(name) > 214:
+    elif ecosystem == "npm" and (not re.fullmatch(r"(?:@[a-z0-9._-]+/)?[a-z0-9._-]+", name) or len(name) > 214):
         raise DependencyParseError("Invalid npm dependency name.")
+    elif ecosystem not in {"npm", "pypi"} and (len(name) > 214 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", name)):
+        raise DependencyParseError("Invalid registry dependency name.")
     safe = _spec(spec)
     if safe is not None:
         result.setdefault(name, set()).add(safe)
@@ -215,6 +219,84 @@ def _python_lock(data, kind):
     return result
 
 
+def _cargo(data, locked=False):
+    result = {}
+    if locked:
+        for entry in _list(data.get("package")):
+            entry = _mapping(entry)
+            if str(entry.get("source", "")).startswith("registry+"):
+                _add(result, "cargo", entry.get("name"), entry.get("version"))
+        return result
+
+    def groups(table):
+        for group in ("dependencies", "dev-dependencies", "build-dependencies"):
+            for name, entry in _mapping(table.get(group, {})).items():
+                if isinstance(entry, str):
+                    _add(result, "cargo", name, entry)
+                else:
+                    entry = _mapping(entry)
+                    if not any(key in entry for key in ("path", "git", "workspace")):
+                        _add(result, "cargo", entry.get("package", name), entry.get("version", "*"))
+    groups(data)
+    groups(_mapping(data.get("workspace", {})))
+    for table in _mapping(data.get("target", {})).values():
+        groups(_mapping(table))
+    return result
+
+
+def _go(text, locked=False):
+    result, in_require, replaced = {}, False, set()
+    if locked:
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) != 3 or not parts[2].startswith("h1:"):
+                raise DependencyParseError("Malformed Go checksum entry.")
+            _add(result, "golang", parts[0], parts[1].removesuffix("/go.mod"))
+        return result
+    for line in text.splitlines():
+        line = line.split("//", 1)[0].strip()
+        if "=>" in line:
+            # A replaced module's require version is not its selected source.
+            left = line.split("=>", 1)[0].removeprefix("replace ").split()
+            if left:
+                replaced.add(left[0])
+        if line.startswith("require "):
+            line = line[len("require "):].strip()
+            if line == "(":
+                in_require = True
+                continue
+        elif not in_require:
+            continue
+        if line == ")":
+            in_require = False
+            continue
+        if line:
+            parts = line.split()
+            if len(parts) != 2:
+                raise DependencyParseError("Malformed Go require declaration.")
+            _add(result, "golang", parts[0], parts[1])
+    if in_require:
+        raise DependencyParseError("Unclosed Go require block.")
+    return {name: specs for name, specs in result.items() if name not in replaced}
+
+
+def _composer(data, locked=False):
+    result = {}
+    if locked:
+        for group in ("packages", "packages-dev"):
+            for entry in _list(data.get(group, [])):
+                entry = _mapping(entry)
+                _add(result, "packagist", entry.get("name"), entry.get("version"))
+    else:
+        for group in ("require", "require-dev"):
+            for name, version in _mapping(data.get(group, {})).items():
+                if "/" in name:  # Runtime and ext-* requirements are not packages.
+                    _add(result, "packagist", name, version)
+    return result
+
+
 def _snapshot(path, text):
     if text is None:
         return {}
@@ -222,6 +304,12 @@ def _snapshot(path, text):
     try:
         if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_DEPENDENCY_BYTES:
             raise DependencyParseError("Dependency file exceeds the 256 KB parsing limit.")
+        if name in {"go.mod", "go.sum"}:
+            return _go(text, name == "go.sum")
+        if name in {"cargo.toml", "cargo.lock"}:
+            return _cargo(tomllib.loads(text), name == "cargo.lock")
+        if name in {"composer.json", "composer.lock"}:
+            return _composer(_mapping(json.loads(text, object_pairs_hook=_json_object)), name == "composer.lock")
         if name.endswith(".json") or name == "pipfile.lock":
             data = _mapping(json.loads(text, object_pairs_hook=_json_object))
             return _python_lock(data, name) if name == "pipfile.lock" else _npm(data, name != "package.json")
@@ -240,10 +328,12 @@ def changed_dependencies(path: str, before: str | None, after: str | None) -> li
     if not is_dependency_file(path):
         raise DependencyParseError("Unsupported dependency filename.")
     name = PurePosixPath(path.lower()).name
-    if name in _UNSUPPORTED:
+    if name in _UNSUPPORTED or name.endswith((".csproj", ".fsproj")):
         raise DependencyParseError(f"{name} dependency parsing is not supported.")
     old, new = _snapshot(path, before), _snapshot(path, after)
-    ecosystem = "npm" if name in ("package.json", "package-lock.json", "npm-shrinkwrap.json") else "pypi"
+    ecosystem = ("npm" if name in ("package.json", "package-lock.json", "npm-shrinkwrap.json") else
+                 "cargo" if name.startswith("cargo.") else "golang" if name in {"go.mod", "go.sum"} else
+                 "packagist" if name.startswith("composer.") else "pypi")
     return [{"ecosystem": ecosystem, "package": package,
              "before": " || ".join(sorted(old[package])) if package in old else None,
              "version": " || ".join(sorted(new[package])) if package in new else None}

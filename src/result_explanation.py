@@ -52,6 +52,8 @@ def _locations(findings):
 def explain_public_result(result) -> dict:
     """Explain reported facts only; absence of a match never implies safety."""
     result = result if isinstance(result, dict) else {}
+    if isinstance(result.get("review"), dict):
+        return _explain_agent_result(result)
     dependencies = _rows(result.get("dependencies"))
     findings = _rows(result.get("findings"))
     names = _names(dependencies)
@@ -123,3 +125,40 @@ def explain_public_result(result) -> dict:
     else:
         next_step = "Choose a proposed dependency version and test the affected code with both current and proposed versions."
     return {"heading": heading, "summary": summary, "checked": checked, "limits": limits, "nextStep": next_step}
+
+
+def _explain_agent_result(result):
+    review = result["review"]
+    findings = _rows(result.get("findings"))
+    agent = [row for row in findings if row.get("origin") == "agent"]
+    hints = [row for row in findings if row.get("origin") != "agent"]
+    files = result.get("filesScanned")
+    files = files if type(files) is int and files >= 0 else 0
+    paths = review.get("filesRead")
+    read_count = len(paths) if isinstance(paths, list) else 0
+    status = review.get("status")
+    if status == "completed":
+        heading = f"{len(agent)} potential issue{'s' if len(agent) != 1 else ''} to review" if agent else "No concrete issues reported by this review"
+        summary = f"The agent read {read_count} of {files} available source, configuration, and manifest files."
+        if agent:
+            summary += " Findings cite exact source excerpts, but their triggers and proposed fixes have not been reproduced."
+        else:
+            summary += " This bounded review found no reportable issues; it does not establish repository correctness."
+    else:
+        heading = "Agent review unavailable" if status == "unavailable" else "Agent review incomplete"
+        summary = f"The snapshot contains {files} eligible files; the agent read {read_count} before stopping."
+        summary += " General bug discovery did not complete, so this is not a clean bill of health."
+    if hints:
+        summary += f" {len(hints)} separate static migration hint{'s' if len(hints) != 1 else ''} also need review."
+    locations = _locations(agent or hints)
+    if locations:
+        summary += f" Start with {locations}."
+    limits = ("No repository code or tests were run. Manifest declarations and lockfile entries do not prove installed versions. "
+              "The agent reviews a bounded subset and can miss bugs; all findings and patches require independent tests.")
+    if result.get("warnings"):
+        limits = "Review the scan warnings for missing formats, skipped files, or agent availability. " + limits
+    return {"heading": heading, "summary": summary,
+            "checked": "The agent chooses source reads and searches based on repository evidence. Dependencies are discovered from actual supported manifests and lockfiles.",
+            "limits": limits,
+            "nextStep": ("Reproduce the reported trigger, review the proposed change, and run the repository's relevant tests before accepting a fix."
+                         if findings else "Review agent availability and coverage, then run the repository's own tests for the behavior you need to verify.")}
