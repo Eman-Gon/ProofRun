@@ -1,7 +1,6 @@
 """Dashboard tests use stored-shaped reports and stubbed runners, never Docker."""
 
 from copy import deepcopy
-import hashlib
 import http.client
 import json
 import os
@@ -41,17 +40,6 @@ def fixture_report():
             "upgrade": {"ecosystem": "pypi", "package": "pydantic", "before": "==1.10.18", "version": "==2.8.2"},
             "source": {"provenance": "curated source note; no live lookup"},
             "probe_provenance": "prepared probe data (--offline)", "results": results}
-
-
-def cloud_memory():
-    evidence = {"project": "secondlook/upgrade-demo", "status": "confirmed_break", "finding": "Omitted nickname changes behavior"}
-    body = json.dumps(evidence, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-    digest = hashlib.sha256(body.encode()).hexdigest()
-    dataset_id = "be83bd3e-8bf0-4505-9c52-4ee1087d0e83"
-    return {"status": "stored_and_retrieved", "backend": "cloud", "dataset": "secondlook_compatibility_" + "c" * 32,
-            "dataset_id": dataset_id, "evidence": evidence, "evidence_sha256": digest,
-            "retrieved_excerpt": f"SECONDLOOK_VERIFIED_EVIDENCE_V1 {digest}\n{body}\nSECONDLOOK_VERIFIED_EVIDENCE_END {digest}",
-            "graph_summary": {"dataset_id": dataset_id, "num_nodes": 22, "num_edges": 29}}
 
 
 class DashboardTests(unittest.TestCase):
@@ -94,8 +82,7 @@ class DashboardTests(unittest.TestCase):
         gpu, demo = self.manager.state()["cases"]
         expected_fields = {"id", "repository", "title", "kind", "package", "fromVersion", "toVersion", "status", "summary",
                            "sourceUrl", "repoUrl", "commit", "filePath", "lineNumbers", "beforeCode", "afterCode",
-                           "explanation", "scope", "provenance", "checkedAt", "checks", "patch", "canRun", "unavailableReason",
-                           "liveSupported", "integrations"}
+                           "explanation", "scope", "provenance", "checkedAt", "checks", "patch", "canRun", "unavailableReason"}
         for case in (gpu, demo):
             self.assertEqual(set(case), expected_fields)
             self.assertEqual(case["status"], "confirmed_break")
@@ -212,133 +199,24 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(job["status"], "completed")
         self.assertEqual(job["exitCode"], 1)
         self.assertEqual(job["id"], response["run"]["id"])
-        self.assertEqual(commands[0][1:], ["-m", "src.main", "upgrade-demo", "--offline", "--no-memory"])
+        self.assertEqual(commands[0][1:], ["-m", "src.main", "upgrade-demo", "--offline"])
 
-    def test_live_evidence_requires_both_source_and_memory_retrieval(self):
-        report = fixture_report()
-        report["source"] = {"provider": "brightdata", "content_sha256": "a" * 64,
-                            "source_url": "https://example.com/migration", "fetched_at": report["checked_at"]}
-        report["memory_verification"] = {"status": "stored_and_retrieved", "dataset": "secondlook_compatibility_" + "b" * 32,
-                                         "retrieved_excerpt": "Retrieved canonical evidence", "retrieved_at": report["checked_at"]}
-        report["prior_memory"] = {"status": "recalled", "matches": [{"retrieved_excerpt": "Earlier verified finding"}]}
-        commands = []
-        def run(command, emit):
-            commands.append(command)
-            (self.demo / "report.json").write_text(json.dumps(report))
-            return 1
-        with patch.object(self.manager, "_execute", side_effect=run):
-            self.assertEqual(self.manager.start("pydantic", "live")[0], 202)
-            self.manager.worker.join(timeout=2)
-        state = self.manager.state()
-        self.assertEqual(state["history"][0]["status"], "completed")
-        self.assertIn("--require-integrations", commands[0])
-        services = state["cases"][1]["integrations"]
-        self.assertEqual(services["brightData"]["status"], "verified")
-        self.assertEqual(services["cognee"]["status"], "verified")
-        self.assertEqual(services["priorMemory"]["status"], "recalled")
-        report["memory_verification"] = {"status": "failed"}
-        with patch.object(self.manager, "_execute", side_effect=run):
-            self.assertEqual(self.manager.start("pydantic", "live")[0], 202)
-            self.manager.worker.join(timeout=2)
-        state = self.manager.state()
-        self.assertEqual(state["history"][0]["status"], "failed")
-        self.assertEqual(state["cases"][1]["status"], "confirmed_break")
-        self.assertEqual(state["cases"][1]["integrations"]["cognee"]["status"], "failed")
+    def test_retired_live_mode_is_rejected_before_execution(self):
+        with patch.object(self.manager, "_execute") as execute:
+            for case_id in ("pydantic", "gpu-energy-pandas"):
+                self.assertEqual(self.manager.start(case_id, "live")[0], 400)
+            execute.assert_not_called()
+        self.assertFalse(self.manager.state()["history"])
 
-    def test_offline_or_fallback_evidence_does_not_count_as_verified_integrations(self):
-        self.write_reports()
-        self.assertEqual(self.manager.case("pydantic")["integrations"]["brightData"]["status"], "not_run")
+    def test_saved_service_metadata_is_not_exposed(self):
         report = fixture_report()
-        report["source"] = {"provider": "direct_https"}
-        report["memory"] = "secondlook_compatibility_" + "b" * 32
+        report["memory_verification"] = {"status": "stored_and_retrieved", "retrieved_excerpt": "old-provider-data"}
+        report["prior_memory"] = {"matches": ["old-provider-data"]}
         (self.demo / "report.json").write_text(json.dumps(report))
-        services = self.manager.case("pydantic")["integrations"]
-        self.assertEqual(services["brightData"]["status"], "fallback")
-        self.assertEqual(services["cognee"]["status"], "stored_only")
-        self.assertEqual(self.manager.start("gpu-energy-pandas", "live")[0], 400)
-        self.assertEqual(self.manager.start("pydantic", "arbitrary")[0], 400)
-
-    def test_legacy_cognee_success_is_explicitly_local_and_has_no_cloud_link(self):
-        report = fixture_report()
-        report["memory_verification"] = {"status": "stored_and_retrieved", "dataset": "secondlook_compatibility_" + "b" * 32,
-                                         "retrieved_excerpt": "Earlier verified local evidence"}
-        report["prior_memory"] = {"status": "recalled", "matches": [{"retrieved_excerpt": "Earlier local finding"}]}
-        (self.demo / "report.json").write_text(json.dumps(report))
-        services = self.manager.case("pydantic")["integrations"]
-        self.assertEqual(services["cognee"]["status"], "verified")
-        for key in ("cognee", "priorMemory"):
-            self.assertEqual(services[key]["backend"], "local")
-            self.assertIn("Cognee local", services[key]["detail"])
-            self.assertNotIn("Cloud", services[key]["detail"])
-            self.assertIsNone(services[key]["graphUrl"])
-            self.assertIsNone(services[key]["graphSummary"])
-            self.assertIsNone(services[key]["datasetId"])
-
-    def test_cloud_retrieval_exposes_matching_dataset_graph_counts_and_cloud_link(self):
-        report = fixture_report()
-        report["memory_verification"] = cloud_memory()
-        report["prior_memory"] = {"status": "recalled", "backend": "cloud", "matches": [cloud_memory()]}
-        (self.demo / "report.json").write_text(json.dumps(report))
-        services = self.manager.case("pydantic")["integrations"]
-        self.assertEqual(services["cognee"]["status"], "verified")
-        self.assertEqual(services["priorMemory"]["status"], "recalled")
-        for key in ("cognee", "priorMemory"):
-            self.assertEqual(services[key]["backend"], "cloud")
-            self.assertIn("Cognee Cloud", services[key]["detail"])
-            self.assertEqual(services[key]["datasetId"], report["memory_verification"]["dataset_id"])
-            self.assertEqual(services[key]["graphSummary"], {"datasetId": services[key]["datasetId"], "numNodes": 22, "numEdges": 29})
-            self.assertEqual(services[key]["graphUrl"], "https://platform.cognee.ai/knowledge-graph")
-
-    def test_cloud_requires_nonempty_matching_graph_and_matching_retrieval(self):
-        invalid = []
-        for key in ("num_nodes", "num_edges"):
-            for count in (0, -1, True, "22", None):
-                memory = cloud_memory()
-                memory["graph_summary"][key] = count
-                invalid.append(memory)
-        for key, value in (("dataset_id", "wrong"), ("graph_summary", None), ("retrieved_excerpt", "unrelated result"),
-                           ("evidence_sha256", "a" * 64), ("evidence", {"different": "finding"}), ("dataset", "other_dataset")):
-            memory = cloud_memory()
-            memory[key] = value
-            invalid.append(memory)
-        memory = cloud_memory()
-        memory["graph_summary"]["dataset_id"] = "c2e18696-e4a3-4a49-a0fe-b2acd6cd8f6c"
-        invalid.append(memory)
-        for memory in invalid:
-            with self.subTest(memory=memory):
-                report = fixture_report()
-                report["memory_verification"] = memory
-                report["prior_memory"] = {"status": "recalled", "backend": "cloud", "matches": [memory]}
-                (self.demo / "report.json").write_text(json.dumps(report))
-                case = self.manager.case("pydantic")
-                self.assertEqual(case["status"], "confirmed_break")
-                self.assertEqual(case["integrations"]["cognee"]["status"], "failed")
-                self.assertEqual(case["integrations"]["priorMemory"]["status"], "failed")
-                json.dumps(case, allow_nan=False)
-
-    def test_cloud_zero_graph_counts_are_visible_but_not_verified(self):
-        report = fixture_report()
-        report["memory_verification"] = cloud_memory()
-        report["memory_verification"]["graph_summary"].update(num_nodes=0, num_edges=0)
-        (self.demo / "report.json").write_text(json.dumps(report))
-        service = self.manager.case("pydantic")["integrations"]["cognee"]
-        self.assertEqual(service["status"], "failed")
-        self.assertEqual(service["graphSummary"]["numNodes"], 0)
-        self.assertEqual(service["graphSummary"]["numEdges"], 0)
-
-    def test_unused_memory_backend_is_neutral_without_claiming_local_or_cloud(self):
-        report = fixture_report()
-        report["memory_verification"] = {"status": "not_run", "backend": "none"}
-        report["prior_memory"] = {"status": "not_run", "backend": "none", "matches": []}
-        (self.demo / "report.json").write_text(json.dumps(report))
-        services = self.manager.case("pydantic")["integrations"]
-        for key in ("cognee", "priorMemory"):
-            self.assertEqual(services[key]["backend"], "none")
-            self.assertEqual(services[key]["status"], "not_run")
-            self.assertNotIn("local", services[key]["detail"])
-            self.assertNotIn("Cloud", services[key]["detail"])
-            self.assertNotIn("unknown", services[key]["detail"])
-            self.assertIsNone(services[key]["graphUrl"])
+        case = self.manager.case("pydantic")
+        self.assertEqual(case["status"], "confirmed_break")
+        self.assertNotIn("integrations", case)
+        self.assertNotIn("old-provider-data", json.dumps(case))
 
     def test_one_active_run_and_bounded_output(self):
         entered, release = threading.Event(), threading.Event()

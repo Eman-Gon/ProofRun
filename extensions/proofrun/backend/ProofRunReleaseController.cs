@@ -68,4 +68,19 @@ public partial class ProofRunController
         catch (ArgumentException ex) { return BadRequest(new { errors = ex.Message }); }
         catch (ProofRunReleaseException ex) { return StatusCode(ex.StatusCode, new { errors = ex.Message }); }
     }
+
+    [HttpPost(ReleaseRoute + "/{id}/failure-research")]
+    [RequestSizeLimit(16000)]
+    [AccessControl(RouteKey = "workspaceId", AnchorNode = "Workspace", Verb = AccessVerbs.Post)]
+    public async Task<IActionResult> ReleaseFailureResearch([FromRoute] string workspaceId, [FromRoute] string id,
+        [FromBody] JsonObject request, [FromServices] IConfiguration config, CancellationToken ct)
+    {
+        try
+        {
+            using var client = ProofRunReleaseClient.FromConfiguration(config);
+            return Ok(new { data = await client.FailureResearchAsync(workspaceId, id, request, ct) });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { errors = ex.Message }); }
+        catch (ProofRunReleaseException ex) { return StatusCode(ex.StatusCode, new { errors = ex.Message }); }
+    }
 }

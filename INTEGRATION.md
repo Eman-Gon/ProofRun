@@ -1,6 +1,34 @@
 # ProofRun — core integration and three-chat build plan
 
-Status: **IN PROGRESS: authenticated local worker and native verification execute successfully; DuploCloud portal, Crusoe and live OpenRouter gates remain blocked on setup/access.** Source baseline: `7118d720ea2ae3e9bc3a2a4f7f61540348086451`, inspected September 29, 2026. Read [CLAUDE.md](CLAUDE.md) for current capabilities, commands, ownership and evidence rules. [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md) stays deferred until the core gate passes.
+## Failure research workflow — September 29, 2026
+
+The user authorized a post-finding **Research this failure** workflow. It uses
+OpenRouter's web search server tool to find related GitHub issues, official
+documentation and release notes. Similarweb remains separate customer context.
+Research is an explicit action with a reviewable search query; raw application
+source, customer inputs and HTTP bodies are not automatically sent to search.
+Reports remain advisory and cannot change a recorded finding or repair verdict.
+
+Implementation ownership for this increment: the integration owner handles
+worker HTTP routes, C# gateway and documentation; the research worker owns new
+`failure_research.py` and its tests; the UI worker owns the research component,
+frontend helpers/services and screen integration; the repair worker owns the
+optional research handoff in Python services/contracts/proposal context.
+Existing staged and unstaged release-investigation work must be preserved.
+
+Shared report contract: `proofrun.failure-research.v1`, with `research_id`,
+`request_id`, `context` (kind, run_id, finding_id, evidence_sha256 and available
+revision/target bindings), `query`, `status` (`completed`, `no_sources`,
+`unavailable`), `summary`, `sources` (id/title/url/excerpt), `suggested_fixes`
+(description/source_ids), `observed_at`, `provenance`, `error`, and `limitations`.
+Research receives only the explicit query externally. A durable request claim
+prevents implicit paid retries. `FailureResearchService.submit(request_id,
+query, context)` and `.get(research_id)` supply the shared implementation.
+Completed sourced research can be selected for a fresh repair run; its context
+must match the original source/contract or release revisions/target, and trusted
+tests remain unchanged. No deployment or commit is part of this action.
+
+Status: **IN PROGRESS: the deployed DuploCloud extension completes a real resource-to-worker comparison; live OpenRouter repair is verified locally. Browser demonstration and Crusoe execution remain pending.** Source baseline: `7118d720ea2ae3e9bc3a2a4f7f61540348086451`, inspected September 29, 2026; subsequent measured changes are recorded below. Read [CLAUDE.md](CLAUDE.md) for current capabilities, commands, ownership and evidence rules. The user selected Similarweb and BAND for implementation; see [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md).
 
 ## User-supplied sponsor references
 
@@ -45,7 +73,7 @@ Capabilities are documented, not authenticated/runtime-tested here. Event credit
 
 ### DuploCloud — Person 1
 
-Needs Docker with modern Compose, Python 3, work-email verification, model access and available ports. Official authoring uses Claude Code. Personal email domains are rejected; source/runtime licensing differs. [DevKit README](https://github.com/duplocloud/devkit/blob/main/README.md) · [Hack Day setup](https://github.com/duplocloud/devkit/blob/main/hackday/Installing%20DevKit.md)
+Needs Docker with modern Compose, Python 3, a verified admin email/license, model access and available ports. Official authoring uses Claude Code. The current local setup accepted the user's supplied email and issued a valid license; the earlier assumption that all personal domains were rejected did not hold for this account. Source/runtime licensing differs. [DevKit README](https://github.com/duplocloud/devkit/blob/main/README.md) · [Hack Day setup](https://github.com/duplocloud/devkit/blob/main/hackday/Installing%20DevKit.md)
 
 Keep the DevKit in a sibling directory, preserving ProofRun's repository and origin. From the parent directory, if that sibling does not already exist:
 
@@ -302,7 +330,7 @@ Person 1 updates this from handoff evidence. Writing documents does not complete
 
 | Gate | Required evidence | Status |
 |---|---|---|
-| DuploCloud round trip | Actual resource/job and returned measured result | IN PROGRESS: email/license verified; local sign-in page reached; Mongo startup, SDK build and portal run pending |
+| DuploCloud round trip | Actual resource/job and returned measured result | API PATH VERIFIED LOCALLY: actual SDK 1.0.6 bundle deployed as 0.1.0; resource 6abc29855171566ca109a335 completed comparison with four verified artifacts. Browser initiation/display pending. |
 | Crusoe contribution | VM/worker identity, source revision and execution artifacts | BLOCKED: no authorized VM/project/SSH route supplied |
 | OpenRouter contribution | Actual proposal operation, model provenance and candidate | VERIFIED LOCALLY: live anthropic/claude-sonnet-5 proposal, run-8648c92ee14844b8b61769810d459839, attempt 1 |
 | Reproduction | Approved baseline pass and supported update failure | VERIFIED LOCALLY: native 7/7 baseline, 6/7 update with supported omission error |
@@ -327,7 +355,7 @@ Live services / mocks / synthetic inputs:
 Blockers and next owner:
 ```
 
-Documentation validation: global Python 3.12 successfully ran the existing CLI help commands. No application tests, comparison runs, account registrations, model calls, VM provisioning or deployments were executed. Setup/build/test commands were source-checked; proposed interfaces need implementation and runtime validation.
+Initial documentation-only validation (historical): global Python 3.12 ran the existing CLI help commands; no application execution or sponsor setup had happened at that point. Subsequent implementation and live checks in section 8 supersede that initial snapshot.
 
 ## 8. Person 1 implementation handoff — September 29, 2026
 
@@ -673,3 +701,80 @@ No live Similarweb metric or BAND room exchange is claimed by this setup record.
 Live Similarweb and BAND execution is pending the user's account configuration
 and chosen customer domain. The private integration file contains placeholders;
 no provider credentials or live traffic figures are committed here.
+
+### Person 1 deployed portal bridge — September 29, 2026
+
+This record supersedes the earlier Mongo/SDK/deployment blockers. Local account
+and license setup are complete, and the official portal bootstrap created or
+adopted `extension-dev` (`6abc27f95171566ca109a084`) and its existing user access.
+Credentials remain in the ignored sibling DevKit `.env`, mode `0600`.
+
+- The ARM64 `mongo:7.0.14` binary crashed even in an isolated version probe.
+  A pinned `mongo:7.0.43` image passed isolated startup/shutdown and authenticated
+  live checks. The sibling default compose override preserves the original
+  volumes and host port 27018. No database reset was used.
+- The complete official builder retrieved SDK 1.0.6 from the running licensed
+  host and built a frozen source snapshot at
+  `.commit-watch/person1-duplo-portal/build-source`. This preserves concurrent
+  release-investigation work, which is not included in this deployment.
+- Bundle `proofrun.verification` version `0.1.0`, SHA-256
+  `8a9b18a35ae829afa4ac58f9d3ecabb02fdc71dec36e3a8377a9f14730a752f5`,
+  deployed with HTTP 200 through official `deploy-extension.sh`.
+  Official `verify-remote-federation.js` passed against the actual host's
+  `remoteEntry.json`, including shared dependency compatibility.
+- An authenticated POST to the actual workspace resource endpoint created
+  resource `6abc29855171566ca109a335`. It progressed through Processing to
+  Complete and returned worker run `run-0cbd8aa9e0734ce48dd09e45e546c268`:
+  `completed` / `regression_reproduced` / `not_requested`. Baseline passed 7/7;
+  updated passed 6/7 and failed the approved missing-nickname case. All four
+  artifacts downloaded through the deployed DuploCloud proxy matched their
+  declared byte lengths and SHA-256 hashes. Unauthenticated resource access
+  returned 401.
+- Receipt: `.commit-watch/person1-duplo-portal/api-resource-6abc29855171566ca109a335/receipt.json`.
+  Bundle/source identity: `bundle.json` and `build-source-manifest.json` under
+  the same evidence root. An earlier resource/run baseline timeout remains
+  retained at `api-resource-6abc291c5171566ca109a1f4`; it was not treated as a pass.
+
+The API-created resource proves the deployed host-to-worker path, not browser
+initiation. The open page is `http://localhost:4210`; user sign-in and the
+visible action/result demonstration remain pending. The deployed action is
+labeled **Check this release** after the coordinated UI wording update; it
+still invokes the registered synthetic fixture. A green portal lifecycle status
+does not replace the separate worker verdicts. Built-in agent response and
+Crusoe execution remain separate, unverified gates.
+
+Copy-ready contract handoff to Persons 2 and 3:
+
+```text
+P1 / main checkout / proofrun.v1 unchanged.
+The extension is deployed as 0.1.0, built against actual SDK 1.0.6. Duplo resource
+6abc29855171566ca109a335 -> run-0cbd8aa9e0734ce48dd09e45e546c268
+completed / regression_reproduced / not_requested; all 4 artifact hashes verified.
+P2: retain run_comparison/verify_candidate signatures and exact contract/case
+IDs; keep incomplete execution inconclusive and permissive repairs rejected.
+P3: retain propose_patch(failure_context, attempt), attempts 1–2, server-only
+model/key settings and safe unavailable behavior. Live Sonnet 5 repair run
+run-8648c92ee14844b8b61769810d459839 is verified locally. Next cloud action is
+the same native worker on Crusoe with real host/revision/evidence, preserving
+the contract and local evidence.
+P1 next: user portal sign-in, visible Check this release run and result display.
+No mocks in the deployed comparison; synthetic inputs and local execution.
+New release-investigation source is separate WIP, outside the deployed 0.1.0 bundle.
+```
+
+Normal DevKit `./run.sh --non-interactive` subsequently completed with exit 0,
+preserving the admin token, workspace and deployed resource. The official flow
+registered `local-agent`, the `devops` persona, the OpenRouter model as System
+default, and the local Qdrant scope. The allowed-model API returns
+`anthropic/claude-sonnet-5 (LLM Gateway)`; receipt is
+`.commit-watch/person1-duplo-portal/normal-setup.json`. Optional Terraform source
+could not be fetched, and Qdrant's collection was skipped because no embedding
+model was registered; neither is used by the ProofRun fixture.
+
+The image healthchecks targeted incorrect internal ports (studio 80 instead of
+60021; UI 8080 instead of 80). The sibling default compose override now checks
+the actual listeners. Both studio and UI report **healthy**, with evidence at
+`../proofrun-duplocloud-devkit/temp/proofrun-devkit-healthchecks.json`. The
+built-in agent remains unverified: its image exits with Python `exec format
+error` and is under investigation. This does not affect the separately verified
+ProofRun worker's OpenRouter proposal path.

@@ -13,9 +13,10 @@ from urllib.parse import urlsplit
 from .release_contracts import canonical, load_targets, validate_request
 from .release_investigation import Investigation
 from .release_service import Conflict, ReleaseService
+from .research import ResearchError
 
 
-def create_server(service, token, host="127.0.0.1", port=8767):
+def create_server(service, token, host="127.0.0.1", port=8767, *, failure_research=None):
     if not isinstance(token, str) or len(token) < 32 or any(ord(c) < 33 or ord(c) > 126 for c in token):
         raise ValueError("Use a server-side worker token of at least 32 printable characters.")
     class Handler(BaseHTTPRequestHandler):
@@ -73,7 +74,9 @@ def create_server(service, token, host="127.0.0.1", port=8767):
             scope = self.authorize()
             if scope is None:
                 return
-            if urlsplit(self.path).path not in ("/v1/release-runs", "/v1/release-events"):
+            path = urlsplit(self.path).path
+            research_match = re.fullmatch(r"/v1/release-runs/(release-[a-f0-9]{40})/failure-research", path)
+            if path not in ("/v1/release-runs", "/v1/release-events") and not research_match:
                 return self.send_json(404, {"error": "Unknown release endpoint."})
             try:
                 if self.headers.get("Transfer-Encoding") or self.headers.get_content_type() != "application/json":
@@ -84,12 +87,30 @@ def create_server(service, token, host="127.0.0.1", port=8767):
                 raw = self.rfile.read(length)
                 if len(raw) != length:
                     raise ValueError("Incomplete request body.")
-                request = json.loads(raw)
+                from .api import _object, _reject_constant
+                request = json.loads(raw, object_pairs_hook=_object, parse_constant=_reject_constant)
+                if research_match:
+                    from .failure_context import release_context, digest
+                    from .failure_research import validate_query
+                    if not isinstance(request, dict) or set(request) != {"request_id", "query", "finding_id"}:
+                        raise ValueError("Invalid research fields")
+                    if not isinstance(request["request_id"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", request["request_id"]):
+                        raise ValueError("Invalid request id")
+                    context = release_context(service.get(research_match[1], scope), request["finding_id"], scope)
+                    query = validate_query(request["query"])
+                    if failure_research is None:
+                        return self.send_json(503, {"error": "Failure research is unavailable on this worker."})
+                    request_id = "release-research-" + digest([scope, research_match[1], request["request_id"]])
+                    return self.send_json(200, failure_research.submit(request_id, query, context))
                 if urlsplit(self.path).path == "/v1/release-events" and (not isinstance(request, dict) or not request.get("event_id")):
                     raise ValueError("Deployment events require an idempotent event_id.")
                 self.send_json(202, service.submit(request, scope))
             except Conflict as exc:
                 self.send_json(409, {"error": str(exc)})
+            except (KeyError, FileNotFoundError):
+                self.send_json(404, {"error": "Unknown release run or finding."})
+            except ResearchError as exc:
+                self.send_json(exc.status, {"error": exc.message})
             except (ValueError, TypeError, UnicodeError):
                 self.send_json(400, {"error": "Invalid release request; check registered target, exact commits, event id and budget."})
     return ThreadingHTTPServer((host, port), Handler)
@@ -115,9 +136,12 @@ def main():
         print(json.dumps({"recommendation": result["recommendation"], "summary": result["summary"],
                           "evidence": str(args.artifacts.resolve()), "agent_status": result["agent"]["status"]}, indent=2))
         return 0 if result["recommendation"] == "update" else 2
-    service = ReleaseService(targets, args.artifacts)
+    from .failure_research import FailureResearchService
+    failure_research = FailureResearchService(args.artifacts / "failure-research")
+    service = ReleaseService(targets, args.artifacts, failure_research=failure_research)
     try:
-        server = create_server(service, os.environ.get("PROOFRUN_WORKER_TOKEN", ""), args.host, args.port)
+        server = create_server(service, os.environ.get("PROOFRUN_WORKER_TOKEN", ""), args.host, args.port,
+                               failure_research=failure_research)
         print(f"Release investigation worker listening on {args.host}:{server.server_port}", flush=True)
         try:
             server.serve_forever()
@@ -127,6 +151,7 @@ def main():
             server.server_close()
     finally:
         service.close()
+        failure_research.close()
     return 0
 
 

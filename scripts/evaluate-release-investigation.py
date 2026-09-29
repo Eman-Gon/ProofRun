@@ -11,6 +11,11 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import hashlib
+import secrets
+import threading
+import time
+import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.proofrun.release_contracts import canonical, validate_request, validate_target
@@ -65,6 +70,7 @@ def main():
     parser.add_argument("--image", required=True, help="Preloaded immutable Python image ID or digest.")
     parser.add_argument("--budget", type=int, default=600)
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--api", action="store_true", help="Exercise authenticated event submission, polling, deduplication, and artifact retrieval.")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -108,12 +114,56 @@ def main():
     request = validate_request(request, {target["id"]: target})
     def emit(event):
         print(json.dumps({k: v for k, v in event.items() if k in {"stage", "type", "step", "status", "probe_id", "repair_id"}}), flush=True)
-    result = Investigation(target, request, output / "evidence", emit=emit).run()
+    api_checks = None
+    evidence_path = output / "evidence"
+    if args.api:
+        from src.proofrun.release_api import create_server
+        from src.proofrun.release_service import ReleaseService
+        service = ReleaseService({target["id"]: target}, output / "worker")
+        token = secrets.token_hex(32)
+        server = create_server(service, token, port=0)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        def http(path, body=None):
+            call = urllib.request.Request(f"http://127.0.0.1:{server.server_port}" + path,
+                data=canonical(body) if body is not None else None,
+                headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            with urllib.request.urlopen(call, timeout=10) as response:
+                return response.read()
+        try:
+            targets_reply = json.loads(http("/v1/release-targets"))
+            request["event_id"] = "synthetic-release-evaluation"
+            run = json.loads(http("/v1/release-events", request))
+            duplicate = json.loads(http("/v1/release-events", request))
+            assert duplicate["id"] == run["id"]
+            observed_events = 0
+            while run["status"] in ("queued", "running"):
+                for event in run["events"][observed_events:]:
+                    emit(event)
+                observed_events = len(run["events"])
+                time.sleep(1)
+                run = json.loads(http("/v1/release-runs/" + run["id"]))
+            if run["status"] != "completed":
+                raise RuntimeError("The live API investigation did not complete; inspect worker/run.json.")
+            result = run["result"]
+            evidence_path = output / "worker" / run["id"] / "evidence"
+            for artifact in result["artifacts"]:
+                data = http("/v1/release-runs/" + run["id"] + "/artifacts/" + artifact["id"])
+                assert len(data) == artifact["bytes"] and hashlib.sha256(data).hexdigest() == artifact["sha256"]
+            api_checks = {"run_id": run["id"], "authenticated_targets": len(targets_reply["targets"]),
+                          "idempotency_verified": True, "retrieved_hash_checked_artifacts": len(result["artifacts"])}
+        finally:
+            server.shutdown()
+            worker.join()
+            server.server_close()
+            service.close()
+    else:
+        result = Investigation(target, request, evidence_path, emit=emit).run()
     measured = {"evaluation": "attempted live model + local Docker; synthetic product",
                 "recommendation": result["recommendation"], "agent_status": result["agent"]["status"],
                 "confirmed_findings": sum(f["status"] == "confirmed" for f in result["findings"]),
                 "repair_statuses": [r["status"] for r in result["repairs"]],
-                "elapsed_seconds": result["elapsed_seconds"], "evidence": str(output / "evidence"),
+                "elapsed_seconds": result["elapsed_seconds"], "evidence": str(evidence_path), "api_checks": api_checks,
                 "candidate_deployed": False}
     (output / "evaluation.json").write_bytes(canonical(measured))
     print(json.dumps(measured, indent=2))

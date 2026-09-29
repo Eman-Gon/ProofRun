@@ -28,13 +28,15 @@ Application and test commands run against the mounted snapshot, not an installed
 | `requirements` | Supply 1–20 unique IDs, descriptions, `kind: preserve_response`, literal endpoint path prefixes, and approved HTTP methods. Do not supply a predeclared failing request, defect location, expected response, or repair. |
 | `runtime.command` | Fixed argv array that starts the HTTP application; it must listen on `0.0.0.0` at the configured port. |
 | `runtime.collector_image` | Immutable ID/digest of a trusted Python image for HTTP observation from a separate container in the application's isolated network namespace. |
-| `runtime.test_command` | Fixed argv array for the original suite. It runs against each revision and proposed repair with baseline test files restored. |
+| `runtime.test_command` | Fixed argv array for the original suite. It runs the baseline suite against both revisions; candidate and repaired source also run their current release suite. |
 | `runtime.workdir`, `port`, `health_path` | A snapshot-relative directory, port 1024–65535, and health endpoint returning a 2xx response. Startup allowance is at most 60 seconds and shares the run deadline. |
 | `runtime.env` | Bounded, non-secret synthetic settings. Worker/model credentials are not passed to application containers. |
 | `test_paths` | Patterns covering all baseline test files, harness files, and relevant acceptance fixtures that must stay frozen. Candidate versions of matching files are removed and baseline copies restored. At least one baseline file must match. |
 | `test_success_pattern` | A regex matching the suite's real nonzero-test completion message. A zero exit alone is insufficient. The example matches unittest's `Ran N tests in …s` summary for N ≥ 1. |
 | `repair_paths` | Narrow allowlist of existing application source paths. Tests, dependency locks, requirements, configuration, and Dockerfiles remain protected. An empty list disables repair. |
 | `exclude_paths` | Additional repository-relative `fnmatch` patterns. Omitted source and tests are outside the result's evidence. |
+
+The candidate is checked twice: once with the protected baseline tests restored, and once with its own current tests. Both suites must pass. Repairs run the same pair against the repaired source. This preserves prior acceptance requirements while also checking tests added in the release. Complete execution, a zero exit code, and the configured nonzero-test completion marker are required for each passing suite; incomplete execution or cleanup cannot count as a pass.
 
 The snapshot reader always excludes common environment/credential paths, key files, dependency directories, and virtual environments. It currently bounds the tracked tree to 6,000 entries, included content to 32 MiB total, and an individual file to 2 MiB. Symlinks and submodules must be explicitly excluded or preparation fails. Recorded manifests identify included files, hashes, and exclusions. This allowlist/exclusion mechanism is not a complete secret scanner; prepare a suitable source mirror before making its content available to the agent.
 
@@ -94,9 +96,10 @@ The workspace gateway contract is:
   GET  /targets
   POST /
   GET  /{id}
+  GET  /{id}/artifacts/{artifactId}
 ```
 
-The new frontend routes are `releases` and `releases/:id` within the extension. It preserves the last observation on refresh failure and stops automatic polling after a bounded interval. A saved result or stopped poll does not establish that the worker just reran or stopped.
+The new frontend routes are `releases` and `releases/:id` within the extension. It preserves the last observation on refresh failure and stops automatic polling after a bounded interval. A saved result or stopped poll does not establish that the worker just reran or stopped. Listed experiments, repair diffs, and other artifacts can be downloaded through the authorized gateway. The gateway checks their recorded hash and size; the browser checks them against its selected run before saving an inert file, with a 16 MiB limit. No upstream artifact URL is followed. Downloading a diff does not apply it.
 
 For a direct local-operator run, use a **new, nonexistent** artifact directory each time:
 
@@ -132,8 +135,12 @@ For write probes, explicitly include the method and set `allow_synthetic_writes:
 
 The agent has bounded source tools and experiment/repair actions, not arbitrary shell access. The current limits are 30 agent decisions, eight experiments, up to 12 requests per experiment, and two repair candidates within the shared execution deadline. The runtime repeats each experiment twice on each revision; unstable or incomplete observations remain inconclusive. Model summaries cannot assign runtime verdicts.
 
-`update` requires completed investigation, passing frozen suites, stable preserved experiments covering every configured requirement, no incomplete experiments, configured staging verification where applicable, and a stated benefit. `skip` retains a confirmed compatibility regression or a candidate-suite failure with a passing baseline. Other outcomes use `postpone`. Requirements exercised is a coverage count, not a passing-test count. Budget expiry, unavailable models, missing evidence, and zero-test executions cannot create a pass.
+Each experiment belongs to one requirement. With two distinct experiments required per requirement, the current eight-experiment cap permits complete `update` coverage for at most four requirements in one run, even though the registry accepts up to 20. Larger configured scopes remain incomplete under this budget.
 
-A repair replaces only approved existing application files. Verification retains baseline tests and already measured experiments, requires independently passing controls and requirement coverage, and compares repaired responses with the original baseline. A `verified_candidate` is reviewable local output: it does not change the finding against the original release, authorize deployment, or establish staging readiness.
+`update` requires completed investigation, passing frozen and current suites, source inspection, and stable preserved experiments covering every configured requirement. Each requirement needs at least two distinct request sequences, including at least one baseline 2xx response; repeating the same sequence under a different name does not add coverage. There must be no incomplete experiments, configured staging must verify, and a release benefit must be stated. Source inspection means the agent has read source or inspected a file-specific diff; it is not proof of a root cause.
+
+`skip` retains a confirmed compatibility regression or a candidate-suite failure with a passing baseline. Other outcomes use `postpone`. Requirements exercised is a coverage count, not a passing-test count. Budget expiry, unavailable models, missing evidence, and zero-test executions cannot create a pass. Findings show the worker's cause hypothesis and `cause_status` separately from their reproduced behavior status.
+
+A repair replaces only approved existing application files. Verification retains baseline tests and already measured experiments, runs the current release suite, requires independently passing controls and the same distinct-input requirement coverage, and compares repaired responses with the original baseline. Its verification records the frozen experiment-set hash. If later investigation expands that set, an earlier `verified_candidate` becomes `verification_stale`; the earlier result cannot claim coverage of newly added experiments. A currently verified candidate remains reviewable local output: it does not change the finding against the original release, authorize deployment, or establish staging readiness.
 
 Keep `result.json`, `source-manifests.json`, `experiments.json`, `repairs.json`, `trace.json`, and any repair diffs together. They record the scope, revisions, hashes, observations, model provenance, and limitations needed to evaluate a recommendation. Use those artifacts to distinguish actual execution from injected-model tests and to decide what further client-workflow or staging validation remains.

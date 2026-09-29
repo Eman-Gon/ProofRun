@@ -8,5 +8,6 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Compile Include="../backend/ProofRunReleaseClient.cs" Link="ProofRunReleaseClient.cs" />
+    <Compile Include="../backend/FailureResearchReport.cs" Link="FailureResearchReport.cs" />
   </ItemGroup>
 </Project>

@@ -12,7 +12,6 @@ let lastRunSignature = '';
 let lastDemoSignature = '';
 let fetching = false;
 let submitting = false;
-let submittingMode = null;
 let submittingRepository = false;
 let repositorySource = 'mine';
 let ownRepositories = [];
@@ -101,81 +100,7 @@ function hasVerifiedFix(item) {
   const check = (item.checks || []).find((candidate) => /fix/i.test(`${candidate.id} ${candidate.label}`));
   return check?.before?.status === 'pass' && check?.after?.status === 'pass';
 }
-function runName(run) { return run?.mode === 'live' ? 'Live investigation' : 'Offline comparison'; }
-
-function integrationStatus(status, service) {
-  const labels = service === 'brightData'
-    ? { verified: 'Source retrieved', fallback: 'Direct fallback', failed: 'Failed', not_run: 'Not run' }
-    : service === 'cognee'
-      ? { verified: 'Stored and retrieved', stored_only: 'Stored only', failed: 'Failed', not_run: 'Not run' }
-      : { recalled: 'Recalled', not_found: 'None found', failed: 'Recall failed', not_run: 'Not run' };
-  const known = Object.hasOwn(labels, status);
-  const tone = ['verified', 'recalled'].includes(status) ? 'verified'
-    : ['fallback', 'stored_only', 'failed'].includes(status) ? 'unverified' : 'neutral';
-  return node('span', `integration-status ${tone}`, known ? labels[status] : 'Not verified');
-}
-
-function renderIntegrations(item) {
-  const integrations = item.integrations;
-  const hasEvidence = Object.values(integrations || {}).some((evidence) => evidence?.status && evidence.status !== 'not_run');
-  $('integration-section').hidden = !item.liveSupported && !hasEvidence;
-  $('integration-list').replaceChildren();
-  if ($('integration-section').hidden) return;
-  for (const [key, purpose] of [['brightData', 'upstream source'], ['cognee', 'this finding'], ['priorMemory', 'previous findings']]) {
-    const evidence = integrations?.[key] || { status: 'not_run', detail: 'No live evidence has been recorded for this case.' };
-    const service = key === 'brightData' ? 'Bright Data'
-      : evidence.backend === 'cloud' ? 'Cognee Cloud'
-        : evidence.backend === 'none' ? 'Cognee'
-          : !evidence.backend || evidence.backend === 'local' ? 'Cognee local' : 'Cognee (unknown backend)';
-    const card = node('article', 'integration-card');
-    const heading = node('div', 'integration-heading');
-    heading.append(node('h4', '', `${service} · ${purpose}`), integrationStatus(evidence.status, key));
-    card.append(heading, node('p', 'integration-detail', evidence.detail || 'No supporting detail available.'));
-    if (evidence.backend === 'cloud') {
-      const graph = evidence.graphSummary;
-      if (graph && Number.isSafeInteger(graph.numNodes) && graph.numNodes >= 0 && Number.isSafeInteger(graph.numEdges) && graph.numEdges >= 0) {
-        card.append(node('p', 'integration-detail', `Cloud graph: ${graph.numNodes.toLocaleString()} nodes · ${graph.numEdges.toLocaleString()} edges`));
-      }
-      const link = node('a', 'integration-source', 'Open Cognee Cloud graph ↗');
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      setLink(link, 'https://platform.cognee.ai/knowledge-graph');
-      card.append(link);
-    }
-    if (key === 'brightData' && evidence.quote) {
-      const quoteLabel = evidence.status === 'verified' ? 'Retrieved source excerpt'
-        : evidence.status === 'fallback' ? 'Direct-source excerpt'
-          : evidence.status === 'not_run' ? 'Prepared source excerpt' : 'Unverified source excerpt';
-      card.append(node('p', 'excerpt-label', quoteLabel), node('blockquote', 'source-excerpt', evidence.quote));
-    }
-    if (evidence.excerpt) {
-      const details = node('details', 'retrieved-evidence');
-      details.append(node('summary', '', 'Inspect retrieved evidence'), node('pre', '', evidence.excerpt));
-      card.append(details);
-    }
-    if (evidence.sourceUrl) {
-      const link = node('a', 'integration-source', 'View upstream source ↗');
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      setLink(link, evidence.sourceUrl);
-      card.append(link);
-    }
-    if (key === 'brightData' && evidence.contentSha256) {
-      const details = node('details', 'dataset-details');
-      details.append(node('summary', '', 'Source content hash (SHA-256)'), node('code', '', evidence.contentSha256));
-      card.append(details);
-    }
-    if (evidence.dataset || evidence.datasetId) {
-      const details = node('details', 'dataset-details');
-      details.append(node('summary', '', 'Memory dataset'));
-      if (evidence.dataset) details.append(node('code', '', evidence.dataset));
-      if (evidence.backend === 'cloud' && evidence.datasetId) details.append(node('code', '', `Cloud dataset ID: ${evidence.datasetId}`));
-      card.append(details);
-    }
-    if (evidence.checkedAt) card.append(node('p', 'integration-time', `Recorded ${dateLabel(evidence.checkedAt)}`));
-    $('integration-list').append(card);
-  }
-}
+function runName() { return 'Offline comparison'; }
 
 function renderProjects() {
   const signature = JSON.stringify([state.cases.map(({ id, repository, kind }) => ({ id, repository, kind })),
@@ -568,7 +493,6 @@ function renderCase() {
   setLink($('source-link'), item.sourceUrl);
   setLink($('repo-link'), item.repoUrl);
   renderEvidence(item);
-  renderIntegrations(item);
 }
 
 function renderEvidence(item) {
@@ -623,8 +547,6 @@ function updateRunPanel() {
   $('run-button').hidden = Boolean(selectedScan());
   if (!item) {
     $('run-button').disabled = true;
-    $('live-run-button').disabled = true;
-    $('live-run-button').hidden = true;
     $('run-panel').hidden = true;
     $('run-note').textContent = selectedScan()?.status === 'running'
       ? 'Source scan in progress. Findings will appear below when it finishes.'
@@ -634,31 +556,24 @@ function updateRunPanel() {
   const active = state.activeRun?.status === 'running' ? state.activeRun : null;
   const caseRun = active?.caseId === item.id ? active : null;
   const unavailable = !connected || submitting || Boolean(active) || !item.canRun;
-  const live = caseRun?.mode === 'live' || submittingMode === 'live';
   $('run-button').disabled = unavailable;
-  $('live-run-button').hidden = !item.liveSupported;
-  $('live-run-button').disabled = unavailable || !item.liveSupported;
-  $('run-button').textContent = (submitting || caseRun) && !live ? 'Comparing…' : 'Run comparison';
-  $('live-run-button').textContent = (submitting || caseRun) && live ? 'Investigating…' : 'Run live investigation';
+  $('run-button').textContent = (submitting || caseRun) ? 'Comparing…' : 'Run comparison';
   $('run-note').textContent = !item.canRun ? (item.unavailableReason || 'This comparison is unavailable.')
-    : caseRun || submitting ? live
-      ? 'Live source and memory calls can take a few minutes. Saved evidence below will update when finished.'
-      : 'Running in Docker. Saved results below will update when finished.'
+    : caseRun || submitting ? 'Running in Docker. Saved results below will update when finished.'
       : active ? `${runName(active)} is running for another project.`
-        : item.liveSupported ? 'Run comparison replays prepared tests in Docker. Run live investigation also checks Bright Data and Cognee.'
-          : 'Viewing a prepared comparison. Run it again to refresh the measured test results in Docker.';
+        : 'Viewing a prepared comparison. Run it again to refresh the measured test results in Docker.';
   const lastRun = caseRuns()[0];
   const shown = caseRun || (lastRun?.status === 'failed' ? lastRun : null);
   $('run-panel').hidden = !shown;
   if (!shown) return;
   const running = shown.status === 'running';
   $('run-panel').classList.toggle('finished', !running);
-  const label = running ? shown.mode === 'live' ? 'Live investigation in progress…' : 'Comparing both versions…'
+  const label = running ? 'Comparing both versions…'
     : `${runName(shown)} failed. Open the output for details.`;
   if ($('run-label').textContent !== label) $('run-label').textContent = label;
   const elapsed = Math.max(0, Math.floor((Date.now() - new Date(shown.startedAt).getTime()) / 1000));
   $('run-time').textContent = running && Number.isFinite(elapsed) ? `${elapsed}s` : '';
-  const output = shown.output || (shown.mode === 'live' ? 'Starting the live investigation…' : 'Starting the comparison…');
+  const output = shown.output || 'Starting the comparison…';
   if ($('run-output').textContent !== output) $('run-output').textContent = output;
   const signature = `${shown.id}:${shown.status}`;
   if (signature !== lastRunSignature) {
@@ -700,7 +615,7 @@ async function refresh() {
     for (const run of state.history) {
       if (initialized && seenRuns.get(run.id) === 'running' && run.status !== 'running') {
         toast(run.status === 'completed'
-          ? run.mode === 'live' ? 'Live investigation finished. Review source and memory evidence.' : 'Comparison complete. Results updated.'
+          ? 'Comparison complete. Results updated.'
           : `${runName(run)} failed. Open the output for details.`, run.status === 'failed');
       }
       seenRuns.set(run.id, run.status);
@@ -728,7 +643,6 @@ async function refresh() {
     $('connection-error').hidden = false;
     $('loading').hidden = true;
     $('run-button').disabled = true;
-    $('live-run-button').disabled = true;
     $('repository-button').disabled = true;
   } finally { fetching = false; }
 }
@@ -779,19 +693,18 @@ async function startRepositoryScan(event) {
   }
 }
 
-async function startRun(mode = 'offline') {
+async function startRun() {
   const item = selectedCase();
-  if (!item || !item.canRun || !connected || submitting || state.activeRun?.status === 'running' || (mode === 'live' && !item.liveSupported)) return;
+  if (!item || !item.canRun || !connected || submitting || state.activeRun?.status === 'running') return;
   submitting = true;
-  submittingMode = mode;
   updateRunPanel();
   try {
     const { response, result } = await requestJson('/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrfToken },
-      body: JSON.stringify({ caseId: item.id, mode }),
+      body: JSON.stringify({ caseId: item.id, mode: 'offline' }),
     });
-    if (!response.ok) throw new Error(result.error || `Unable to start the ${mode === 'live' ? 'live investigation' : 'comparison'}.`);
+    if (!response.ok) throw new Error(result.error || 'Unable to start the comparison.');
     if (result.run) {
       state.activeRun = result.run;
       seenRuns.set(result.run.id, 'running');
@@ -799,7 +712,7 @@ async function startRun(mode = 'offline') {
     }
     await refresh();
   } catch (error) { toast(error.message, true); }
-  finally { submitting = false; submittingMode = null; updateRunPanel(); }
+  finally { submitting = false; updateRunPanel(); }
 }
 
 function downloadReport() {
@@ -848,8 +761,7 @@ $('my-repository-select').addEventListener('change', () => {
 });
 $('repository-input').addEventListener('input', clearRepositoryError);
 $('repository-download-button').addEventListener('click', downloadReport);
-$('run-button').addEventListener('click', () => startRun('offline'));
-$('live-run-button').addEventListener('click', () => startRun('live'));
+$('run-button').addEventListener('click', () => startRun());
 $('download-button').addEventListener('click', downloadReport);
 $('copy-patch-button').addEventListener('click', async () => {
   const patch = selectedCase()?.patch;

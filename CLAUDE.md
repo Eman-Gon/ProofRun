@@ -23,7 +23,7 @@ Start with the checked-in Python/Pydantic fixture and synthetic data. Customer r
 | `src/upgrade_demo.py` | Prepared Pydantic 1.10.18 / 2.8.2 comparison targeting `Customer.nickname`. The fixed application is already checked in. |
 | `src/upgrade_sandbox.py`, `sandbox/upgrade.Dockerfile` | Separate dependency images, immutable image IDs and bounded tests in unprivileged/no-network/read-only Docker containers. |
 | `demo/upgrade/` | Original/fixed applications, pinned dependencies, source note and unittest fixtures. |
-| `src/main.py` | Existing `upgrade-demo` plus separate older commit-review commands. |
+| `src/main.py` | `upgrade-demo` comparison CLI. The memory-dependent `ingest` and `check` commands have been retired. |
 | `tests/`, `reports/`, `demo/ready/` | Test definitions and historical artifacts, not proof of a fresh execution. |
 
 Important source findings:
@@ -32,7 +32,7 @@ Important source findings:
 - The prepared classifier requires the repair to pass before reporting a confirmed break. Separate reproduced findings from repair outcomes.
 - Image reuse is tag-based; generalized environment identity must prevent stale results after requirements change.
 - Configurable model/field support, generated repairs, a worker API, DuploCloud, Crusoe hosting, OpenRouter and BAND are not implemented in this baseline.
-- Existing live paths and dependency files retain older integrations. Do not copy their Configuration table, provider requirements or credentials into the target architecture. Use offline execution as the migration starting point. Removing underlying dependencies requires a later code change and relevant checks.
+- The former source-research and memory integrations have been removed, including their dependencies and dashboard controls. Prepared comparisons remain available; use the current worker for the sponsor workflow.
 
 ## Scope and sponsor responsibilities
 
@@ -111,4 +111,4 @@ Select checks for the changed area. The full suite also includes earlier workflo
 
 Use the evidence gate in `INTEGRATION.md`: actual DuploCloud initiation/results, Crusoe execution, OpenRouter-generated proposal, reproduced regression, original-suite preservation, bad-fix rejection, exact evidence binding and a repeatable integrated demo.
 
-**Current status: IN PROGRESS.** Person 1's authenticated worker and shared `proofrun.v1` types are implemented. Person 2's native verifier has fresh local Docker evidence, including prepared narrow-fix acceptance and permissive-fix rejection. A real OpenRouter-generated repair now passes all 14 declared original-suite/control checks locally, with 10 hash-checked artifacts. Crusoe access remains unavailable. The DuploCloud backend compiles against the actual host SDK 1.0.6; Mongo startup, full packaging and portal deployment remain incomplete. See the current handoff and measured checks in sections 7–8 of `INTEGRATION.md`. Similarweb and BAND are selected for implementation; the remaining optional sponsors stay deferred. Live contribution by either selected addition still requires provider evidence.
+**Current status: IN PROGRESS.** Person 1's authenticated worker and shared `proofrun.v1` types are implemented. Person 2's native verifier has fresh local Docker evidence, including prepared narrow-fix acceptance and permissive-fix rejection. A real OpenRouter-generated repair now passes all 14 declared original-suite/control checks locally, with 10 hash-checked artifacts. Crusoe access remains unavailable. DuploCloud extension 0.1.0 is built against the actual host SDK 1.0.6, deployed, and compatible with the running frontend. A real portal resource completed the local comparison and returned four hash-checked artifacts. Browser sign-in and a visible button-triggered demonstration remain pending. See the current handoff and measured checks in sections 7–8 of `INTEGRATION.md`. Similarweb and BAND are selected for implementation; the remaining optional sponsors stay deferred. Live contribution by either selected addition still requires provider evidence.

@@ -78,6 +78,36 @@ Check(expectedEvent == "release-" + Convert.ToHexString(SHA256.HashData(Encoding
 Check(expectedEvent != ProofRunReleaseClient.EventRunId("workspace-two", "release-123"), "event identity includes workspace");
 Check(ProofRunReleaseClient.EventRunId("a", "bc") != ProofRunReleaseClient.EventRunId("ab", "c"), "event identity boundaries");
 
+var registry = new JsonObject
+{
+    ["schema_version"] = "proofrun.release.v1",
+    ["targets"] = new JsonArray(new JsonObject
+    {
+        ["id"] = "customer-service", ["name"] = "Customer service", ["repair_enabled"] = false,
+        ["staging_configured"] = false, ["contract_hash"] = new string('b', 64),
+        ["revisions"] = new JsonArray(new string('0', 40), new string('1', 40)),
+        ["repository"] = "/private/operator/repository", ["private_credential"] = "must-not-reach-browser",
+        ["requirements"] = new JsonArray(new JsonObject
+        {
+            ["id"] = "customer-read", ["description"] = "Preserve customer reads.", ["kind"] = "preserve_response",
+            ["path_prefix"] = "/customers", ["methods"] = new JsonArray("GET")
+        })
+    })
+};
+var expectedScope = scope;
+using (var client = Client(request => { Auth(request, expectedScope); return Json(registry); }))
+{
+    var targets = await client.GetTargetsAsync(expectedScope, default);
+    Check(targets["targets"]![0]!["repository"] is null && targets["targets"]![0]!["private_credential"] is null,
+        "target configuration exposes only documented public fields");
+    expectedScope = "workspace-two";
+    await client.GetTargetsAsync(expectedScope, default);
+}
+var invalidRegistry = registry.DeepClone().AsObject();
+invalidRegistry["targets"]![0]!["repair_enabled"] = "true";
+using (var client = Client(_ => Json(invalidRegistry)))
+    await Reject(() => client.GetTargetsAsync(scope, default), "malformed target registry");
+
 using (var client = Client(request =>
 {
     Auth(request, scope);
@@ -151,6 +181,8 @@ foreach (var mutate in invalidRuns)
 }
 using (var client = Client(_ => new(HttpStatusCode.OK) { Content = new StringContent("not JSON") }))
     await Reject(() => client.GetRunAsync(scope, id, default), "malformed JSON");
+using (var client = Client(_ => new(HttpStatusCode.OK) { Content = new StringContent("{\"schema_version\":\"proofrun.release.v1\",\"schema_version\":\"unknown\"}") }))
+    await Reject(() => client.GetRunAsync(scope, id, default), "duplicate JSON fields");
 using (var client = Client(_ => new(HttpStatusCode.InternalServerError) { Content = new StringContent("upstream-secret-and-url") }))
 {
     try { await client.GetRunAsync(scope, id, default); throw new Exception("Upstream failure accepted."); }

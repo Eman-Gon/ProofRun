@@ -1,7 +1,6 @@
 """One reproducible Pydantic upgrade investigation, with measured evidence."""
 
 import ast
-import asyncio
 from dataclasses import asdict
 from datetime import datetime, timezone
 import difflib
@@ -18,12 +17,10 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 import requests
 
-from .brightdata import _call, _make_client, _private_transport_logs, _text
 from .dependencies import changed_dependencies
 from .report import terminal_text
 from .sandbox import preflight
 from .upgrade_sandbox import build_image, environment_image_tag, parse_probe_result, run_probe
-from .upgrade_memory import recall_prior, remember_and_recall
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,68 +104,38 @@ def affected_usage(path: Path) -> dict:
     raise UpgradeError("The supported Optional field without a default was not found.")
 
 
-def read_source(api_key: str, offline: bool, require_brightdata: bool = False) -> dict:
+def read_source(offline: bool) -> dict:
     note = json.loads((DEMO / "source.json").read_text())
     if note["source_url"] != PRIMARY_SOURCE:
         raise UpgradeError("This demo reads only the version-pinned Pydantic migration source.")
     if offline:
         return dict(note, text=note["summary"] + "\n" + note["evidence_quote"],
                     provenance="curated source note; no live lookup", provider="curated")
-    if not api_key:
-        raise UpgradeError("Set BRIGHTDATA_API_KEY, or use --offline for the prepared demo.")
     quote = _plain(note["evidence_quote"])
     if len(quote) < 12:
         raise UpgradeError("The migration source did not confirm the expected documented change.")
-    # This is a checked-in, known primary source, never a URL from model output.
-    provenance = "live Bright Data page read"
-    provider = "brightdata"
-    warning = None
-    attempts = []
-    # This known documentation page sometimes needs more than the short
-    # optional-context budget used by commit review. Keep the live demo bounded.
-    transport_options = {"timeout": 60} if require_brightdata else {}
+    # Read only the pinned public source without credentials or redirects.
     try:
-        for attempt in range(2 if require_brightdata else 1):
-            try:
-                with _private_transport_logs(), _make_client(api_key, **transport_options) as client:
-                    page = _text(_call(client, "scrape_as_markdown", {"url": note["source_url"]}, **transport_options))
-                section = _source_excerpt(page, quote)
-                attempts.append({"provider": "brightdata", "status": "verified"})
-                break
-            except Exception:
-                attempts.append({"provider": "brightdata", "status": "failed"})
-                if not require_brightdata or attempt == 1:
-                    raise
-                print("Bright Data returned no verified source; retrying once...", flush=True)
-    except Exception:
-        if require_brightdata:
-            raise UpgradeError("Bright Data did not supply verified source evidence; the required live integration failed.") from None
-        # A fixed public source has a transparent read-only fallback. Never
-        # follow model-supplied URLs or carry the Bright Data token to GitHub.
-        try:
-            with requests.Session() as session:
-                session.trust_env = False
-                with session.get(PRIMARY_SOURCE, timeout=(10, 20), stream=True, allow_redirects=False) as response:
-                    if response.status_code != 200:
-                        raise ValueError("Source unavailable")
-                    body = bytearray()
-                    for chunk in response.iter_content(chunk_size=8192):
-                        body.extend(chunk)
-                        if len(body) > 256_000:
-                            raise ValueError("Source exceeds size limit")
-                    page = bytes(body).decode("utf-8")
-            section = _source_excerpt(page, quote)
-            provenance = "direct HTTPS to version-pinned upstream source"
-            provider = "direct_https"
-            warning = "Bright Data did not return usable source evidence; the public source was read directly without credentials."
-        except Exception as exc:
-            raise UpgradeError("Both live source reads failed; use --offline for the curated demo.") from exc
+        with requests.Session() as session:
+            session.trust_env = False
+            with session.get(PRIMARY_SOURCE, timeout=(10, 20), stream=True, allow_redirects=False) as response:
+                if response.status_code != 200:
+                    raise ValueError("Source unavailable")
+                body = bytearray()
+                for chunk in response.iter_content(chunk_size=8192):
+                    body.extend(chunk)
+                    if len(body) > 256_000:
+                        raise ValueError("Source exceeds size limit")
+                page = bytes(body).decode("utf-8")
+        section = _source_excerpt(page, quote)
+    except Exception as exc:
+        raise UpgradeError("Live source read failed; use --offline for the curated demo.") from exc
     return dict(note, text=section, fetched_at=datetime.now(timezone.utc).isoformat(),
-                provenance=provenance, provider=provider, warning=warning,
-                content_sha256=hashlib.sha256(page.encode()).hexdigest(), attempts=attempts)
+                provenance="direct HTTPS to version-pinned upstream source", provider="direct_https",
+                content_sha256=hashlib.sha256(page.encode()).hexdigest())
 
 
-def propose_probe(source: dict, usage: dict, api_key: str, offline: bool, prior_memory: dict | None = None) -> ProbePlan:
+def propose_probe(source: dict, usage: dict, api_key: str, offline: bool) -> ProbePlan:
     if offline:
         return ProbePlan(input_row={"name": "Ada"}, expected_row={"name": "Ada", "nickname": None},
                          explanation=source["summary"], evidence_quote=source["evidence_quote"])
@@ -197,19 +164,10 @@ def propose_probe(source: dict, usage: dict, api_key: str, offline: bool, prior_
         ),
     )
     try:
-        # One exact-scope prior record is enough for this single-behavior probe.
-        # Its raw retrieved frame already contains the evidence; do not send a
-        # duplicate parsed copy or let repeated runs grow the model prompt.
-        recalled_context = dict(prior_memory or {})
-        if "matches" in recalled_context:
-            recalled_context["matches"] = [
-                {key: value for key, value in match.items() if key != "evidence"}
-                for match in recalled_context["matches"][:1]
-            ]
         reply = agent(json.dumps({"upgrade": detect_upgrade(), "usage": usage,
                                   "app": (DEMO / "app.py").read_text(),
                                   "existing_tests": (DEMO / "test_existing.py").read_text(),
-                                  "source": source, "previous_verified_findings": recalled_context}))
+                                  "source": source}))
         if reply.stop_reason != "end_turn" or len(str(reply).encode()) > 8_000:
             raise ValueError("Incomplete proposal")
         plan = ProbePlan.model_validate_json(str(reply))
@@ -321,28 +279,14 @@ def render_report(report: dict) -> str:
             lines.append(f"  {name:14} {result['status'].upper():7} {result['duration_seconds']}s")
     lines += ["", f"Source: {report['source']['source_url']}", f"Source mode: {report['source']['provenance']}",
               f"Probe: {report['probe_provenance']}", f"Test SHA256: {report['test_sha256']}",
-              f"Cognee: {report['memory']}", f"Evidence: {report['artifact_dir']}",
+              f"Evidence: {report['artifact_dir']}",
               "Scope: one prepared Python app, one documented change; not a general upgrade guarantee."]
     if report["source"].get("warning"):
         lines.append("Source warning: " + report["source"]["warning"])
-    lines.append("Prior Cognee memory: " + report.get("prior_memory", {}).get("status", "not_requested"))
-    if report.get("require_integrations"):
-        lines.append("Required live integrations: " + ("VERIFIED" if report.get("integrations_verified") else "FAILED"))
     return terminal_text("\n".join(lines))
 
 
-def run_demo(*, offline: bool = False, rebuild: bool = False, remember: bool = True, prepare: bool = False,
-             require_integrations: bool = False) -> int:
-    if require_integrations and (offline or prepare or not remember):
-        raise UpgradeError("--require-integrations requires a live run with Cognee enabled.")
-    # Cognee keeps async clients; reuse one loop for recall and persistence.
-    with asyncio.Runner() as runner:
-        return _run_demo(offline=offline, rebuild=rebuild, remember=remember, prepare=prepare,
-                         require_integrations=require_integrations, runner=runner)
-
-
-def _run_demo(*, offline: bool, rebuild: bool, remember: bool, prepare: bool,
-              require_integrations: bool, runner) -> int:
+def run_demo(*, offline: bool = False, rebuild: bool = False, prepare: bool = False) -> int:
     load_dotenv(ROOT / ".env", override=False)
     if offline and rebuild:
         raise UpgradeError("--offline requires cached images; run --prepare --rebuild separately.")
@@ -358,20 +302,8 @@ def _run_demo(*, offline: bool, rebuild: bool, remember: bool, prepare: bool,
     print("Detecting the pinned dependency upgrade and affected app code...", flush=True)
     upgrade, usage = detect_upgrade(), affected_usage(DEMO / "app.py")
     print("Reading upstream evidence and preparing the missing-input test...", flush=True)
-    source = read_source(os.getenv("BRIGHTDATA_API_KEY", ""), offline, require_brightdata=require_integrations)
-    memory_requested = remember and not offline
-    selected_backend = os.getenv("COGNEE_MEMORY_BACKEND", "local")
-    memory_backend = (selected_backend if selected_backend in {"local", "cloud"} else "unknown") if memory_requested else "none"
-    prior_memory = {"status": "not_requested", "matches": [], "backend": "none"}
-    if remember and not offline:
-        print("Retrieving prior verified findings from Cognee for this exact app and version pair...", flush=True)
-        try:
-            prior_memory = runner.run(asyncio.wait_for(recall_prior(
-                upgrade, hashlib.sha256((DEMO / "app.py").read_bytes()).hexdigest(), STATE), timeout=60))
-        except Exception:
-            prior_memory = {"status": "failed", "matches": [], "backend": memory_backend,
-                            "reason": "Prior Cognee retrieval failed or timed out."}
-    plan = propose_probe(source, usage, os.getenv("GROQ_API_KEY", ""), offline, prior_memory)
+    source = read_source(offline)
+    plan = propose_probe(source, usage, os.getenv("GROQ_API_KEY", ""), offline)
     probe = run_dir / "test_upgrade.py"
     probe.write_text(render_probe(plan))
     for filename in ("app.py", "fixed_app.py", "permissive_app.py", "test_existing.py", "test_controls.py",
@@ -428,35 +360,14 @@ def _run_demo(*, offline: bool, rebuild: bool, remember: bool, prepare: bool,
               },
               "requirements_sha256": {label: hashlib.sha256((run_dir / f"requirements-{label}.txt").read_bytes()).hexdigest()
                                       for label in ("old", "new")},
-              "images": images, "results": results, "artifact_dir": str(run_dir),
-              "memory": "not requested", "memory_verification": {"status": "not_requested", "backend": memory_backend},
-              "prior_memory": prior_memory, "require_integrations": require_integrations}
+              "images": images, "results": results, "artifact_dir": str(run_dir)}
     patch = "".join(difflib.unified_diff((run_dir / "app.py").read_text().splitlines(True),
                                         (run_dir / "fixed_app.py").read_text().splitlines(True),
                                         fromfile="app.py", tofile="app.py"))
     (run_dir / "suggested-fix.patch").write_text(patch)
     report["fix_patch"] = patch
-    if remember and not offline and report["status"] == "confirmed_break" and report["repair_status"] == "verified":
-        print("Saving the finding in Cognee, then querying Cognee to verify retrieval...", flush=True)
-        try:
-            # Cloud builds run remotely and can legitimately spend 180 seconds
-            # processing before the retrieval and graph-count checks begin.
-            memory_timeout = 240 if memory_backend == "cloud" else 120
-            verified = runner.run(asyncio.wait_for(remember_and_recall(report, STATE), timeout=memory_timeout))
-            report["memory_verification"] = verified
-            report["memory"] = "stored and retrieved: " + verified["dataset"]
-        except Exception:
-            report["memory"] = "not verified: Cognee persistence or retrieval failed or timed out"
-            report["memory_verification"] = {"status": "failed", "backend": memory_backend}
-    report["integrations_verified"] = (
-        source.get("provider") == "brightdata"
-        and report["memory_verification"].get("status") == "stored_and_retrieved"
-        and prior_memory.get("status") != "failed"
-    )
     text = render_report(report)
     (run_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     (run_dir / "report.txt").write_text(text + "\n")
     print(text)
-    if require_integrations and not report["integrations_verified"]:
-        return 2
     return 1 if report["status"] == "confirmed_break" else 2

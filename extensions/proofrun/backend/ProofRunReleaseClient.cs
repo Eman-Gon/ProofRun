@@ -128,6 +128,20 @@ public sealed class ProofRunReleaseClient : IDisposable
         return bytes;
     }
 
+    public async Task<JsonObject> FailureResearchAsync(string workspaceId, string runId, JsonObject input, CancellationToken ct)
+    {
+        RequireScope(workspaceId); RequireRunId(runId);
+        if (input is null || input.Count != 3 || !input.ContainsKey("query") || !input.ContainsKey("finding_id")
+            || !input.ContainsKey("request_id") || !Guid.TryParseExact(Text(input, "request_id"), "D", out _)
+            || !Id.IsMatch(Text(input, "finding_id")))
+            throw new ArgumentException("Supply a finding ID, request nonce and reviewed search query.");
+        var query = FailureResearchReport.Query(Text(input, "query"));
+        var request = input.DeepClone().AsObject(); request["query"] = query;
+        var report = await JsonAsync(workspaceId, HttpMethod.Post, $"v1/release-runs/{runId}/failure-research", request, ct);
+        try { return FailureResearchReport.Validate(report, "release", runId, Text(input, "finding_id"), workspaceId, query); }
+        catch (ArgumentException) { throw new ProofRunReleaseException("The worker returned invalid or differently bound failure research."); }
+    }
+
     public static string EventRunId(string workspaceId, string eventId)
     {
         RequireScope(workspaceId);
@@ -140,7 +154,7 @@ public sealed class ProofRunReleaseClient : IDisposable
     private static JsonObject NormalizeRequest(JsonObject input)
     {
         const string invalid = "Use a registered target, distinct exact lowercase commit SHAs, a 180–600 second budget, and a supported release request.";
-        var fields = new HashSet<string>(["target_id", "baseline_revision", "candidate_revision", "benefit", "budget_seconds", "repair", "event_id"]);
+        var fields = new HashSet<string>(["target_id", "baseline_revision", "candidate_revision", "benefit", "budget_seconds", "repair", "event_id", "failure_research_id"]);
         if (input is null || input.Any(pair => !fields.Contains(pair.Key)) || !Id.IsMatch(Text(input, "target_id")) ||
             !Commit.IsMatch(Text(input, "baseline_revision")) || !Commit.IsMatch(Text(input, "candidate_revision")) ||
             Text(input, "baseline_revision") == Text(input, "candidate_revision")) throw new ArgumentException(invalid);
@@ -151,6 +165,8 @@ public sealed class ProofRunReleaseClient : IDisposable
         if (!Integer(result, "budget_seconds", out var budget) || budget is < 180 or > 600 ||
             !Boolean(result, "repair", out _) || !StringValue(result["benefit"], out var benefit) || benefit.Length > 2000 ||
             (result.ContainsKey("event_id") && !Id.IsMatch(Text(result, "event_id"))) ||
+            (result.ContainsKey("failure_research_id") && (!FailureResearchReport.IsId(Text(result, "failure_research_id"))
+                || result["repair"]?.GetValue<bool>() != true)) ||
             Encoding.UTF8.GetByteCount(result.ToJsonString()) > 16000) throw new ArgumentException(invalid);
         return result;
     }
@@ -224,8 +240,28 @@ public sealed class ProofRunReleaseClient : IDisposable
         using var request = Request(workspaceId, method, path);
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
         var bytes = await SendAsync(request, MaxJsonBytes, ct);
-        try { return JsonNode.Parse(bytes, documentOptions: new JsonDocumentOptions { MaxDepth = 64 }) as JsonObject ?? throw new JsonException(); }
+        try
+        {
+            using var document = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 64 });
+            RequireUniqueJsonFields(document.RootElement);
+            return JsonNode.Parse(bytes, documentOptions: new JsonDocumentOptions { MaxDepth = 64 }) as JsonObject ?? throw new JsonException();
+        }
         catch (JsonException) { throw new ProofRunReleaseException("The release worker returned invalid JSON; no recommendation was inferred."); }
+    }
+
+    private static void RequireUniqueJsonFields(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in value.EnumerateObject())
+            {
+                if (!names.Add(property.Name)) throw new JsonException();
+                RequireUniqueJsonFields(property.Value);
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+            foreach (var item in value.EnumerateArray()) RequireUniqueJsonFields(item);
     }
 
     private static HttpRequestMessage Request(string workspaceId, HttpMethod method, string path)
@@ -288,7 +324,11 @@ public sealed class ProofRunReleaseClient : IDisposable
     private static bool Integer(JsonObject value, string key, out long number)
     {
         number = 0;
-        return value[key] is JsonValue scalar && scalar.TryGetValue(out number);
+        if (value[key] is not JsonValue scalar) return false;
+        if (scalar.TryGetValue(out number)) return true;
+        if (!scalar.TryGetValue<int>(out var integer)) return false;
+        number = integer;
+        return true;
     }
     private static bool Boolean(JsonObject value, string key, out bool flag)
     {

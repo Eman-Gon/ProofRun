@@ -1,4 +1,5 @@
 {
+  "redaction_note": "Two retired provider module paths and hashes were removed from this historical receipt. Remaining values describe the original collection, not the current checkout.",
   "crusoe_identity_record": null,
   "docker_server_version": "29.7.2",
   "execution_target": "local",
@@ -61,8 +62,6 @@
       "requirements-worker.txt": "9cec7ef815a35f6a797e32e0d99bb00b4dee421b4439e0cc3aefe706e8d5f2c2",
       "sandbox/upgrade.Dockerfile": "fd6cf63b222fa50685b55c30e7abfbe4fc88e9a7ae19da7cf50fa96e733dcafd",
       "src/__init__.py": "65584d93ba000043003b2e6638e7669601816ceed1f2c6590fc4138154ad9be3",
-      "src/brightdata.py": "466ac44aa9a4b4e829a59d266ff1d2fc7ee88de41d2045680d0b4c515d2955a0",
-      "src/cognee_cloud.py": "d48018061b6d11319adbbdf0d968d0897048e0650a0d7f2ed7966ebe209456bc",
       "src/config.py": "7076f60119b23ee369895e76428c6bab7c11692a18a70c7e76b5306baab8cc8e",
       "src/dashboard.py": "d8a37bacb89ec819933dd7b2d94df118cf1a2104b9cdaf9082ec67c3589673d3",
       "src/demo_ready.py": "7c001b86206bcebf7808efbf94e99f8a922a0a53b1982ca80ef406b232642082",

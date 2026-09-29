@@ -144,3 +144,13 @@ python -m pytest tests/test_proofrun_api.py tests/test_proofrun_service.py \
 These tests exercise API, orchestration, verification and proposal handling, using mocks where appropriate. They do not establish live sponsor integration. The separate Docker experiment and actual service runs provide runtime evidence.
 
 The supported scope is one registered Python/Pydantic fixture. Arbitrary repository execution, automatic repository changes and automatic deployment are not implemented. A verified candidate passed the declared checks; its evidence is limited to the supplied source, inputs and environments.
+
+## Local dashboard
+
+Start the local dashboard with `python3.12 -m src.dashboard` and open
+`http://localhost:8765`. It provides saved source scans and prepared Docker
+comparisons. The former source-research and memory integrations, their live
+investigation button, and the dependent `ingest`/`check` CLI commands have been
+removed. `python3.12 -m src.main upgrade-demo --offline` remains available;
+its saved evidence is local. The current sponsor workflow uses the separate
+ProofRun worker and DuploCloud extension described above.

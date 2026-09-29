@@ -14,7 +14,6 @@ REPOSITORIES = (
     ("gpu-energy-pandas", "Eman-Gon/gpu-energy-recommender", "gpu-energy-recommender.json"),
     ("scam-killer", "Eman-Gon/scam_killer", "scam-killer.json"),
     ("gauntlet", "Eman-Gon/Gauntlet", "gauntlet.json"),
-    ("agent-with-a-brain", "sandhya-subramani/Agent-with-a-Brain", "agent-with-a-brain.json"),
     ("flask", "pallets/flask", "flask.json"),
 )
 SHA = "7a802eace3a3775acc5ea4af6c266079e2599eb3"
@@ -58,7 +57,7 @@ class DemoReadyTests(unittest.TestCase):
             second = load_demo_ready(Path(str(self.root)), [])
         self.assertEqual(first, second)
         self.assertEqual([entry["id"] for entry in first], [row[0] for row in REPOSITORIES])
-        self.assertEqual(len(first), 5)
+        self.assertEqual(len(first), 4)
         for entry, (_, repository, _) in zip(first, REPOSITORIES):
             with self.subTest(repository=repository):
                 self.assertTrue(entry["available"])
@@ -153,7 +152,6 @@ class DemoReadyTests(unittest.TestCase):
         entries = load_demo_ready(self.root, [])
         self.assertNotIn("web-vitals", entries[1]["summary"])
         self.assertNotIn("Next.js", entries[2]["summary"])
-        self.assertNotIn("Cognee", entries[3]["summary"])
         self.assertIn("compatibility is unverified", entries[1]["summary"])
 
     def test_oversized_file_is_unavailable(self):
@@ -182,7 +180,7 @@ class DemoReadyTests(unittest.TestCase):
     def test_checked_in_examples_have_complete_commit_and_honest_static_evidence(self):
         root = Path(__file__).resolve().parents[1]
         entries = load_demo_ready(root, [])
-        self.assertEqual(len(entries), 5)
+        self.assertEqual(len(entries), 4)
         for entry in entries:
             with self.subTest(repository=entry["repository"]):
                 self.assertTrue(entry["available"], entry["unavailableReason"])

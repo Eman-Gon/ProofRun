@@ -120,7 +120,7 @@ def public_target(target: dict) -> dict:
 
 def validate_request(raw: dict, targets: dict) -> dict:
     if not isinstance(raw, dict) or set(raw) - {"target_id", "baseline_revision", "candidate_revision",
-            "benefit", "budget_seconds", "repair", "event_id"}:
+            "benefit", "budget_seconds", "repair", "event_id", "failure_research_id"}:
         raise ValueError("Unsupported release request fields.")
     request = copy.deepcopy(raw)
     if not isinstance(request.get("target_id"), str) or request["target_id"] not in targets:
@@ -140,6 +140,10 @@ def validate_request(raw: dict, targets: dict) -> dict:
     request.setdefault("repair", False)
     if type(request["repair"]) is not bool or (request["repair"] and not target["repair_paths"]):
         raise ValueError("Repair must be enabled in the target's application path allowlist.")
+    if "failure_research_id" in request and (not request["repair"]
+            or not isinstance(request["failure_research_id"], str)
+            or not ID.fullmatch(request["failure_research_id"])):
+        raise ValueError("Selected failure research requires repair and a valid report id.")
     request.setdefault("benefit", "")
     if not isinstance(request["benefit"], str) or len(request["benefit"]) > 2000:
         raise ValueError("Describe the release benefit in at most 2000 characters.")

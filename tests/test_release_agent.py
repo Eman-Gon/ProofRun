@@ -40,8 +40,10 @@ def reply(value=None, provenance=None):
 
 
 def completion(value=None, **overrides):
+    wire = copy.deepcopy(action() if value is None else value)
+    wire["arguments"] = json.dumps(wire["arguments"])
     return {"id": "gen-synthetic-001", "model": MODEL,
-            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(action() if value is None else value)}}],
+            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(wire)}}],
             **overrides}
 
 
@@ -142,6 +144,71 @@ class ReleaseAgentTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertNotIn("repair_status", result)
         self.assertEqual(runtime.call_args.args[0], "propose_repair")
+
+    def test_twelve_step_probe_is_accepted_thirteen_is_diagnosed_without_arguments(self):
+        for count in (12, 13):
+            probe = action("run_probe", {"name": "Probe " + "x" * 128, "requirement_id": "preserve-input",
+                "steps": [{"method": "GET", "path": "/records?private=not-for-diagnostics"}] * count,
+                "hypothesis": "Exercise a sequence chosen after source inspection."})
+            runtime, events = Mock(return_value={}), []
+            responses = iter([reply(probe), reply()])
+            result = self.run_agent(lambda *_: next(responses), runtime, events=events)
+            self.assertEqual(result["status"], "completed" if count == 12 else "failed")
+            if count == 12:
+                self.assertEqual(len(runtime.call_args.args[1]["steps"]), 12)
+            else:
+                runtime.assert_not_called()
+                record = result["provenance"][0]
+                self.assertEqual(record["validation_error_code"], "invalid_probe_steps")
+                self.assertEqual(record["attempted_tool"], "run_probe")
+                self.assertEqual(record["probe_step_count"], 13)
+                self.assertEqual(record["operation_id"], "synthetic-operation")
+                self.assertNotIn("not-for-diagnostics", json.dumps([result, events]))
+
+    def test_source_read_range_matches_runtime_defaults_and_three_hundred_line_limit(self):
+        for start, end, allowed in ((1, 300, True), (401, 700, True), (1, 301, False), (301, None, False)):
+            args = {"revision": "candidate", "path": "service.py", "start_line": start}
+            if end is not None:
+                args["end_line"] = end
+            runtime = Mock(return_value={})
+            responses = iter([reply(action("read_file", args)), reply()])
+            result = self.run_agent(lambda *_: next(responses), runtime)
+            self.assertEqual(result["status"], "completed" if allowed else "failed")
+            if not allowed:
+                runtime.assert_not_called()
+                self.assertEqual(result["provenance"][0]["validation_error_code"], "invalid_line_range")
+
+    def test_experiment_and_repair_caps_are_advertised_and_enforced(self):
+        cases = [
+            ("run_probe", 8, {"name": "Probe", "requirement_id": "preserve-input",
+                "steps": [{"method": "GET", "path": "/records"}], "hypothesis": "Explore input."}, "probe_limit"),
+            ("propose_repair", 2, {"finding_id": "finding-1", "changes": [{"path": "service.py", "content": "pass\n"}],
+                "rationale": "Address observed behavior."}, "repair_limit"),
+        ]
+        for tool, limit, args, code in cases:
+            messages_seen, runtime = [], Mock(return_value={})
+
+            def model(messages, timeout):
+                messages_seen.append(messages)
+                return reply(action(tool, args))
+
+            result = self.run_agent(model, runtime, data=context(repair_enabled=True))
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(runtime.call_count, limit)
+            self.assertEqual(result["provenance"][-1]["validation_error_code"], code)
+            self.assertEqual(json.loads(messages_seen[0][1]["content"])["limits"][tool], limit)
+            self.assertEqual(json.loads(messages_seen[-1][-1]["content"])["remaining_budget"][tool], 0)
+
+    def test_runtime_validation_refusal_has_fixed_diagnostic_and_cannot_finish(self):
+        events, model = [], Mock(return_value=reply(action("diff", {})))
+        result = self.run_agent(model, Mock(side_effect=ValueError("private refusal text " + KEY)), events=events)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(model.call_count, 1)
+        refusal = next(event for event in events if event["type"] == "tool_result")["result"]
+        self.assertEqual(refusal["error_code"], "tool_request_rejected")
+        self.assertFalse(refusal["complete"])
+        self.assertNotIn("private refusal text", json.dumps([result, events]))
+        self.assertNotIn(KEY, json.dumps([result, events]))
 
     def test_tool_exception_is_failure_and_error_body_is_not_retained(self):
         sensitive = "raw server error contains private credential"
@@ -298,6 +365,11 @@ class ReleaseProviderTests(unittest.TestCase):
         payload = json.loads(kwargs["input"])
         self.assertEqual(payload["body"]["model"], MODEL)
         self.assertFalse(payload["body"]["provider"]["allow_fallbacks"])
+        schema = payload["body"]["response_format"]
+        self.assertEqual(schema["type"], "json_schema")
+        self.assertTrue(schema["json_schema"]["strict"])
+        self.assertFalse(schema["json_schema"]["schema"]["additionalProperties"])
+        self.assertEqual(schema["json_schema"]["schema"]["properties"]["arguments"], {"type": "string"})
         self.assertNotIn("temperature", payload["body"])
         self.assertEqual(kwargs["env"], {})
         self.assertLessEqual(kwargs["timeout"], 5)
@@ -369,6 +441,41 @@ class ReleaseProviderTests(unittest.TestCase):
         self.assertEqual(result["provenance"][0]["operation_id"], "gen-synthetic-001")
         self.assertEqual(result["provenance"][0]["finish_reason"], "length")
         self.assertIn("output limit", result["summary"])
+
+    def test_strict_provider_envelope_preserves_arbitrary_nested_probe_json(self):
+        probe = action("run_probe", {"name": "Explore", "requirement_id": "preserve-input",
+            "steps": [{"method": "POST", "path": "/records", "json": {"arbitrary": [None, True, 1, {"unicode": "\u2603"}]}}],
+            "hypothesis": "Investigate product behavior."})
+        process = Mock(return_value=process_response(completion(probe)))
+        config = RepairConfig(KEY, MODEL)
+        messages = [{"role": "system", "content": agent.SYSTEM}, {"role": "user", "content": "Approved context"}]
+        original = copy.deepcopy(messages)
+        with patch.object(agent.subprocess, "run", process):
+            response = agent._live_model(config, messages, 5)
+        self.assertEqual(response["action"], probe)
+        self.assertEqual(messages, original)
+
+    def test_parse_failures_retain_only_fixed_stage_and_location_diagnostics(self):
+        wire = {"tool": "finish", "arguments": json.dumps({"summary": "Done"}), "reason": "Finish."}
+        cases = [
+            ("```json\n" + json.dumps(wire) + "\n```", "decision_json_invalid"),
+            (json.dumps({**wire, "arguments": '{"summary": private-unquoted-data}'}), "decision_arguments_json_invalid"),
+            (json.dumps({**wire, "arguments": '{"summary":"a","summary":"b"}'}), "decision_arguments_json_invalid"),
+            (json.dumps({**wire, "arguments": {"summary": "Done"}}), "decision_envelope_invalid"),
+            (json.dumps({**wire, "unexpected": "private-extra-data"}), "decision_envelope_invalid"),
+        ]
+        for content, code in cases:
+            envelope = completion()
+            envelope["choices"][0]["message"]["content"] = content
+            events = []
+            result = self.live(Mock(return_value=process_response(envelope)), events=events)
+            self.assertEqual(result["status"], "failed")
+            record = result["provenance"][0]
+            self.assertEqual(record["error_code"], code)
+            self.assertEqual(record["operation_id"], "gen-synthetic-001")
+            self.assertEqual(record["decision_bytes"], len(content.encode()))
+            self.assertNotIn("private-unquoted-data", json.dumps([events, result]))
+            self.assertNotIn("private-extra-data", json.dumps([events, result]))
 
     def test_malformed_or_missing_provenance_fails(self):
         invalid = completion()

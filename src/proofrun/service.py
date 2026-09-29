@@ -63,7 +63,7 @@ class ServiceError(ValueError):
 class RunService:
     def __init__(self, root: Path, artifact_dir: Path, execution_target="local",
                  worker_id=None, runner_mode="native", compare=None, verify=None,
-                 propose=None, band_handoff=None):
+                 propose=None, band_handoff=None, failure_research=None):
         self.root = Path(root).resolve()
         self.artifact_dir = Path(artifact_dir).resolve()
         self.artifact_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -77,6 +77,7 @@ class RunService:
         self.execution_target, self.worker_id = execution_target, worker_id or "local-worker"
         self.compare, self.verify, self.propose = compare, verify, propose
         self.band_handoff = band_handoff
+        self.failure_research = failure_research
         self._mutex = threading.RLock()
         self._process_lock = (self.artifact_dir / "worker.lock").open("a")
         try:
@@ -165,10 +166,14 @@ class RunService:
         if not isinstance(payload["job_key"], str) or not SAFE_ID.fullmatch(payload["job_key"]):
             invalid("job_key must contain 1–128 letters, digits, dots, underscores or hyphens")
         repair = payload["repair"]
-        if (not isinstance(repair, dict) or set(repair) != {"enabled", "max_attempts"}
+        if (not isinstance(repair, dict) or set(repair) not in (
+                {"enabled", "max_attempts"}, {"enabled", "max_attempts", "research_id"})
                 or type(repair["enabled"]) is not bool or type(repair["max_attempts"]) is not int
                 or not 1 <= repair["max_attempts"] <= 2):
             invalid("repair needs enabled boolean and max_attempts 1 or 2")
+        if "research_id" in repair and (not repair["enabled"]
+                or not isinstance(repair["research_id"], str) or not SAFE_ID.fullmatch(repair["research_id"])):
+            invalid("Selected research needs repair enabled and a valid research_id")
         registered, contract, content = self._registered()
         for field in ("contract", "environments"):
             if payload[field] != registered[field]:
@@ -192,6 +197,30 @@ class RunService:
                 invalid("Uncommitted application content requires an explicit bundle_sha256")
         return registered, contract, content
 
+    def _repair_research(self, repair, registered):
+        if "research_id" not in repair:
+            return None
+        from .failure_context import fixture_context
+        from .repair import research_advisory
+        try:
+            if self.failure_research is None:
+                raise ValueError()
+            report = self.failure_research.get(repair["research_id"])
+            context = report.get("context")
+            if (report.get("research_id") != repair["research_id"] or not isinstance(context, dict)
+                    or context.get("kind") != "fixture"):
+                raise ValueError()
+            original = self.get_run(context.get("run_id"))
+            expected = fixture_context(original, context.get("scope", "operator"))
+            if context != expected or any(context.get(key) != value for key, value in {
+                    "revision": registered["source"]["revision"],
+                    "source_sha256": registered["source"]["sha256"],
+                    "contract_sha256": registered["contract"]["sha256"]}.items()):
+                raise ValueError()
+            return research_advisory(report)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise ServiceError(400, "invalid_research", "Research must cite sources and match a completed reproduced run and the current source/contract.") from None
+
     def submit(self, payload: dict) -> tuple[dict, bool]:
         if not isinstance(payload, dict):
             raise ServiceError(400, "invalid_submission", "Submission must be a JSON object")
@@ -206,6 +235,7 @@ class RunService:
             if self._closed:
                 raise ServiceError(503, "worker_stopping", "Worker is stopping")
             registered, contract, content = self._validate(payload)
+            failure_research = self._repair_research(payload["repair"], registered)
             if self._active:
                 raise ServiceError(409, "worker_busy", "The worker already has an active run; retry later")
             run_id = "run-" + uuid4().hex
@@ -247,12 +277,14 @@ class RunService:
                       "proposal": None, "cases": [], "artifacts": [], "attempts": [],
                       "limitations": [], "created_at": now(), "updated_at": now(),
                       "_input_sha256": fingerprint, "_artifact_paths": {}}
+            if failure_research is not None:
+                record["failure_research_id"] = failure_research["research_id"]
             self._records[run_id] = record
             self._keys[key] = run_id
             self._active = run_id
             self._save(record)
             result = self._public(record)
-            self._pool.submit(self._execute, record, spec, bundle, payload["repair"], contract)
+            self._pool.submit(self._execute, record, spec, bundle, payload["repair"], contract, failure_research)
             return result, True
 
     def get_run(self, run_id: str) -> dict:
@@ -350,7 +382,7 @@ class RunService:
                 if not re.fullmatch(r"[0-9a-f]{64}", evidence.bindings.get(key, "")):
                     raise ValueError("Runner evidence lacks environment or test identity")
 
-    def _execute(self, record, spec, bundle, repair, contract):
+    def _execute(self, record, spec, bundle, repair, contract, failure_research=None):
         try:
             self._change(record, execution_status="running")
             compare = self.compare
@@ -409,6 +441,8 @@ class RunService:
                 requirements=contract,
                 requirements_json=(spec.root / "demo/upgrade/contract.json").read_text(),
                 comparison={k: v for k, v in comparison.to_dict().items() if k not in {"artifacts", "failure_context"}})
+            if failure_research is not None:
+                context["failure_research"] = failure_research
             for attempt in range(1, repair["max_attempts"] + 1):
                 try:
                     proposal = propose(context, attempt)
@@ -495,7 +529,7 @@ class RunService:
         # execution cannot call model/source/memory providers. No credentials go to tests.
         code = ("import sys; from pathlib import Path; from src import upgrade_demo as d; "
                 "d.STATE=Path(sys.argv[1]); d.ROOT=Path(sys.argv[2]); d.DEMO=d.ROOT/'demo'/'upgrade'; "
-                "raise SystemExit(d.run_demo(offline=True,remember=False))")
+                "raise SystemExit(d.run_demo(offline=True))")
         process = subprocess.run([sys.executable, "-c", code, str(spec.artifact_dir), str(spec.root)],
                                  cwd=self.root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=480)
         reports = list(spec.artifact_dir.glob("upgrade-demo/*/report.json"))

@@ -21,6 +21,7 @@ from src.proofrun.contracts import (
     VerificationEvidence,
 )
 from src.proofrun.service import CASE_ID, MODULE, RunService, ServiceError
+from src.proofrun.failure_context import fixture_context
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -675,6 +676,79 @@ class ProofRunServiceTests(unittest.TestCase):
         self.assertNotEqual(current["bindings"]["source_sha256"], "changed-client-copy")
         self.assertTrue(current["cases"])
         self.assert_error(404, "unknown_run", lambda: service.get_run("run-unknown"))
+
+    def research_report(self, run):
+        return {"schema_version": "proofrun.failure-research.v1", "research_id": "research-fixture",
+                "status": "completed", "context": fixture_context(run),
+                "summary": "Related migration guidance describes explicit optional defaults.",
+                "sources": [{"id": "source-1", "title": "Migration guide", "url": "https://docs.pydantic.dev/latest/migration/"}],
+                "suggested_fixes": [{"description": "Consider an explicit default and preserve validation.", "source_ids": ["source-1"]}]}
+
+    def test_selected_research_reaches_repair_without_changing_fresh_verification(self):
+        propose = Mock(side_effect=proposal)
+        verify = Mock(side_effect=verification)
+        research = Mock()
+        service = self.service(propose=propose, verify=verify, failure_research=research)
+        prior = self.execute(service)
+        research.get.assert_not_called()
+        report = self.research_report(prior)
+        report.update(provider_raw="DO NOT SEND RAW REPORT", requirements={"weaken": True})
+        research.get.return_value = report
+        payload = self.payload(service, repair=True)
+        payload["repair"]["research_id"] = report["research_id"]
+        run, _ = service.submit(payload)
+        result = self.finish(service, run)
+        self.assertEqual(result["repair_status"], "verified")
+        self.assertEqual(result["failure_research_id"], report["research_id"])
+        advisory = propose.call_args.args[0]["failure_research"]
+        self.assertEqual(advisory["summary"], report["summary"])
+        self.assertIn("Untrusted", advisory["notice"])
+        self.assertNotIn("DO NOT SEND RAW REPORT", json.dumps(advisory))
+        self.assertNotIn("requirements", advisory)
+        self.assertEqual(result["bindings"]["tests_sha256"], prior["bindings"]["tests_sha256"])
+        self.assertEqual(result["bindings"]["contract_sha256"], prior["bindings"]["contract_sha256"])
+        self.assertEqual(result["finding_status"], "regression_reproduced")
+        verify.assert_called_once()
+
+    def test_invalid_or_stale_research_is_rejected_before_another_comparison(self):
+        compare = Mock(side_effect=comparison)
+        research = Mock()
+        service = self.service(compare=compare, failure_research=research)
+        prior = self.execute(service)
+        valid = self.research_report(prior)
+        mutations = [lambda r: r.update(status="no_sources"), lambda r: r.update(sources=[]),
+                     lambda r: r.update(research_id="research-other"),
+                     lambda r: r["context"].update(kind="release"),
+                     lambda r: r["context"].update(run_id="run-missing"),
+                     lambda r: r["context"].update(evidence_sha256="0" * 64),
+                     lambda r: r["context"].update(source_sha256="0" * 64),
+                     lambda r: r["context"].update(contract_sha256="0" * 64),
+                     lambda r: r["context"].update(revision="0" * 40)]
+        for mutation in mutations:
+            report = copy.deepcopy(valid)
+            mutation(report)
+            research.get.return_value = report
+            payload = self.payload(service, repair=True)
+            payload["repair"]["research_id"] = valid["research_id"]
+            self.assert_error(400, "invalid_research", lambda: service.submit(payload))
+        research.get.return_value = valid
+        # Editing the registered application invalidates research of an older
+        # source even if that original report and finding are internally valid.
+        with (self.root / MODULE).open("a") as stream:
+            stream.write("\n# newer application content\n")
+        payload = self.payload(service, repair=True)
+        payload["repair"]["research_id"] = valid["research_id"]
+        self.assert_error(400, "invalid_research", lambda: service.submit(payload))
+        self.assertEqual(compare.call_count, 1)
+        self.assertEqual(len(service._records), 1)
+
+    def test_selected_research_requires_enabled_repair_and_available_report_service(self):
+        service = self.service()
+        payload = self.payload(service)
+        payload["repair"]["research_id"] = "research-fixture"
+        self.assert_error(400, "invalid_submission", lambda: service.submit(payload))
+        payload["repair"]["enabled"] = True
+        self.assert_error(400, "invalid_research", lambda: service.submit(payload))
 
 
 if __name__ == "__main__":

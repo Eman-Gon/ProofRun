@@ -16,8 +16,6 @@ _ENTRIES = (
      "A saved source scan for reviewing dependency declarations and migration findings."),
     ("gauntlet", "Eman-Gon/Gauntlet", "gauntlet.json",
      "A larger application showing dependency declarations and the limits of static checks."),
-    ("agent-with-a-brain", "sandhya-subramani/Agent-with-a-Brain", "agent-with-a-brain.json",
-     "An agent application showing dependencies that need checks beyond the supported migration rules."),
     ("flask", "pallets/flask", "flask.json",
      "A Python framework example for reviewing scan coverage and dependency declarations."),
 )
@@ -99,8 +97,6 @@ def _summary(entry_id, result):
         return "Legacy web-vitals imports make a compact JavaScript migration review. The suggested migration is untested."
     if entry_id == "gauntlet" and ("npm", "next") in packages and any(ecosystem == "pypi" for ecosystem, _ in packages):
         summary = "A full-stack Python and Next.js dependency inventory."
-    elif entry_id == "agent-with-a-brain" and {("pypi", "cognee"), ("pypi", "strands-agents")} <= packages:
-        summary = "An agent using Cognee and Strands, whose APIs need checks beyond the three supported migration rules."
     elif entry_id == "flask" and ("pypi", "flask") in packages:
         summary = "An established Python framework showing source coverage and dependency declarations."
     else:

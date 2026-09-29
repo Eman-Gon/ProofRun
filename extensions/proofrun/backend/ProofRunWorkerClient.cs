@@ -20,6 +20,12 @@ public sealed class ProofRunResearchRequest
     public string Month { get; set; } = "";
 }
 
+public sealed class FailureResearchRequest
+{
+    public string ClientNonce { get; set; } = "";
+    public string Query { get; set; } = "";
+}
+
 public sealed class ProofRunWorkerClient : IDisposable
 {
     public const string CaseId = "customer-nickname-v1";
@@ -145,7 +151,30 @@ public sealed class ProofRunWorkerClient : IDisposable
     private static bool BoundedText(JsonObject value, string key, int max)
         => Text(value, key) is { Length: > 0 } text && text.Length <= max;
 
-    public async Task<JsonObject> GetSubmissionAsync(string workspaceId, string resourceId, bool enableRepair, CancellationToken ct)
+    public async Task<JsonObject> FailureResearchAsync(string workspaceId, string resourceId, string runId,
+        FailureResearchRequest input, CancellationToken ct)
+    {
+        var run = await GetRunAsync(runId, ct);
+        RequireJobKey(run, JobKey(workspaceId, resourceId));
+        if (Text(run, "execution_status") != "completed" || Text(run, "finding_status") != "regression_reproduced")
+            throw new ArgumentException("Research requires a completed check with a reproduced regression.");
+        var query = FailureResearchReport.Query(input.Query);
+        var body = new JsonObject { ["request_id"] = ResearchKey(workspaceId, resourceId, input.ClientNonce), ["query"] = query };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"v1/runs/{runId}/failure-research");
+        request.Headers.Add("X-ProofRun-Scope", workspaceId);
+        request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+        var bytes = await SendAsync(request, MaxJsonBytes, ct);
+        try
+        {
+            var report = JsonNode.Parse(bytes)?.AsObject() ?? throw new JsonException();
+            return FailureResearchReport.Validate(report, "fixture", runId, "regression", workspaceId, query);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        { throw new ProofRunBridgeException("The worker returned invalid or differently bound failure research."); }
+    }
+
+    public async Task<JsonObject> GetSubmissionAsync(string workspaceId, string resourceId, bool enableRepair, CancellationToken ct,
+        string? failureResearchId = null)
     {
         var registered = await JsonAsync(HttpMethod.Get, $"v1/cases/{CaseId}", null, ct);
         if (Text(registered, "schema_version") != "proofrun.v1" ||
@@ -157,6 +186,17 @@ public sealed class ProofRunWorkerClient : IDisposable
         submission["job_key"] = JobKey(workspaceId, resourceId);
         // Repair is explicit, defaults off in the UI, and never substitutes a prepared candidate.
         submission["repair"] = new JsonObject { ["enabled"] = enableRepair, ["max_attempts"] = 2 };
+        if (failureResearchId is not null)
+        {
+            if (!enableRepair || !FailureResearchReport.IsId(failureResearchId))
+                throw new ProofRunBridgeException("Select completed failure research and enable a fresh repair check.");
+            var report = await JsonAsync(HttpMethod.Get, $"v1/failure-research/{failureResearchId}", null, ct);
+            if (report["context"] is not JsonObject context || Text(context, "scope") != workspaceId
+                || Text(context, "kind") != "fixture" || Text(report, "status") != "completed"
+                || Text(report, "research_id") != failureResearchId)
+                throw new ProofRunBridgeException("Failure research is not available to this workspace.");
+            submission["repair"]!["research_id"] = failureResearchId;
+        }
         return submission;
     }
 

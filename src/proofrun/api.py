@@ -21,6 +21,7 @@ from .contracts import SCHEMA_VERSION
 if TYPE_CHECKING:
     from .service import RunService
     from .research import ResearchService
+    from .failure_research import FailureResearchService
 
 MAX_BODY_BYTES = 65_536
 REQUEST_TIMEOUT_SECONDS = 10
@@ -58,7 +59,7 @@ class _Server(ThreadingHTTPServer):
 
 def create_server(
     service: RunService, token: str, host: str = "127.0.0.1", port: int = 8766,
-    *, research: ResearchService | None = None,
+    *, research: ResearchService | None = None, failure_research: FailureResearchService | None = None,
 ) -> ThreadingHTTPServer:
     """Construct a server; the caller owns serve/shutdown and service.close()."""
     if (not isinstance(token, str) or not 1 <= len(token) <= 512
@@ -153,6 +154,19 @@ def create_server(
             if self.command == "POST" and self.path == "/v1/runs":
                 run, created = service.submit(self._body())
                 self._json(202 if created else 200, run)
+            elif self.command == "POST" and (match := re.fullmatch(rf"/v1/runs/({_IDENTIFIER})/failure-research", self.path)):
+                from .failure_context import fixture_context
+                payload = self._body()
+                if set(payload) != {"request_id", "query"}:
+                    raise _HTTPError(400, "invalid_research", "Supply request_id and the reviewed search query.")
+                if failure_research is None:
+                    raise _HTTPError(503, "research_unavailable", "Failure research is not configured on this worker.")
+                context = fixture_context(service.get_run(match[1]), self.headers.get("X-ProofRun-Scope", "operator"))
+                self._json(200, failure_research.submit(payload["request_id"], payload["query"], context))
+            elif self.command == "GET" and (match := re.fullmatch(r"/v1/failure-research/(failure-research-[a-f0-9]{64})", self.path)):
+                if failure_research is None:
+                    raise _HTTPError(503, "research_unavailable", "Failure research is not configured on this worker.")
+                self._json(200, failure_research.get(match[1]))
             elif self.command == "POST" and self.path == "/v1/customer-research":
                 payload = self._body()
                 if research is None:
@@ -210,13 +224,15 @@ def main(argv: list[str] | None = None) -> int:
         config = WorkerConfig.from_env()
     except ConfigurationError as exc:
         parser.error(str(exc))
-    service = server = research = None
+    service = server = research = failure_research = None
     try:
         from .research import ResearchService
         research = ResearchService(config.artifact_dir / "customer-research")
+        from .failure_research import FailureResearchService
+        failure_research = FailureResearchService(config.artifact_dir / "failure-research")
         service = RunService(args.root.resolve(), config.artifact_dir, execution_target=config.execution_target,
-                             worker_id=config.worker_id, runner_mode=args.runner)
-        server = create_server(service, config.token, args.host, args.port, research=research)
+                             worker_id=config.worker_id, runner_mode=args.runner, failure_research=failure_research)
+        server = create_server(service, config.token, args.host, args.port, research=research, failure_research=failure_research)
         print(f"ProofRun worker listening on {args.host}:{server.server_port} ({args.runner} runner).", flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
@@ -231,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
             service.close()
         if research is not None:
             research.close()
+        if failure_research is not None:
+            failure_research.close()
     return 0
 
 

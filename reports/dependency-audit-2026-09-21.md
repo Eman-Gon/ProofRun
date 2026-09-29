@@ -34,7 +34,7 @@ cd /Users/emanschool/secondlook
 python3 .commit-watch/repo-audit/gpu-energy-pandas/reproduce.py
 ```
 
-For a demo: show the real source location, run the identical checks on both versions, display the pandas migration note and exact exception, then rerun with the lowercase fix. Identify the probe as prepared by this audit. This run did not use live Groq generation or Cognee memory.
+For a demo: show the real source location, run the identical checks on both versions, display the pandas migration note and exact exception, then rerun with the lowercase fix. Identify the probe as prepared by this audit. This run did not use live model generation or persistent memory.
 
 ## Confirmed API mismatch: scam_killer telemetry
 

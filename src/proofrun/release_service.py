@@ -23,8 +23,9 @@ def now():
 
 
 class ReleaseService:
-    def __init__(self, targets, directory: Path, factory=Investigation):
+    def __init__(self, targets, directory: Path, factory=Investigation, *, failure_research=None):
         self.targets, self.directory, self.factory = copy.deepcopy(targets), Path(directory), factory
+        self.failure_research = failure_research
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._lease = (self.directory / ".worker.lock").open("a")
         try:
@@ -61,7 +62,30 @@ class ReleaseService:
 
     @staticmethod
     def public(record):
-        return copy.deepcopy({k: v for k, v in record.items() if k != "scope"})
+        return copy.deepcopy({k: v for k, v in record.items() if k != "scope" and not k.startswith("_")})
+
+    def _repair_research(self, request, target, scope):
+        if "failure_research_id" not in request:
+            return None
+        from .failure_context import release_context
+        from .repair import research_advisory
+        try:
+            if self.failure_research is None:
+                raise ValueError()
+            report = self.failure_research.get(request["failure_research_id"])
+            context = report.get("context")
+            if (report.get("research_id") != request["failure_research_id"] or not isinstance(context, dict)
+                    or context.get("kind") != "release" or context.get("scope") != scope):
+                raise ValueError()
+            original = self.get(context.get("run_id"), scope)
+            expected = release_context(original, context.get("finding_id"), scope)
+            if (context != expected or any(context.get(key) != request[key] for key in
+                    ("target_id", "baseline_revision", "candidate_revision"))
+                    or (original.get("result") or {}).get("contract_hash") != target["contract_hash"]):
+                raise ValueError()
+            return research_advisory(report)
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise ValueError("Research must cite sources and match a confirmed finding, authorized scope, release revisions and target contract.") from None
 
     def submit(self, raw, scope="operator"):
         request = validate_request(raw, self.permitted_targets(scope))
@@ -75,11 +99,14 @@ class ReleaseService:
                 if prior["binding"] != binding:
                     raise Conflict("This event id already identifies a different request or target contract.")
                 return self.public(prior)
+            failure_research = self._repair_research(request, target, scope)
             if sum(r["status"] in ("queued", "running") for r in self.records.values()) >= 16:
                 raise Conflict("The release queue is full; try again after a run completes.")
             record = {"schema_version": SCHEMA, "id": run_id, "scope": scope, "binding": binding,
                       "status": "queued", "request": request, "created_at": now(), "updated_at": now(),
                       "events": [], "result": None}
+            if failure_research is not None:
+                record["_failure_research"] = failure_research
             self.records[run_id] = record
             self.save(record)
             self.executor.submit(self.execute, run_id, copy.deepcopy(target))
@@ -98,8 +125,11 @@ class ReleaseService:
                 record["updated_at"] = now()
                 self.save(record)
         try:
+            options = {"emit": emit}
+            if record.get("_failure_research") is not None:
+                options["failure_research"] = copy.deepcopy(record["_failure_research"])
             investigation = self.factory(target, record["request"],
-                                         self.directory / run_id / "evidence", emit=emit)
+                                         self.directory / run_id / "evidence", **options)
             result = investigation.run()
             with self.lock:
                 record.update(status="completed", result=result, updated_at=now())

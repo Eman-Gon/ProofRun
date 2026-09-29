@@ -24,7 +24,8 @@ public class ProofRunWorker : ResourceWorkerBase<ProofRunVerification, ProofRunS
             using var client = ProofRunWorkerClient.FromConfiguration(_config);
             if (entity.Result.SubmissionJson is null)
             {
-                var submission = await client.GetSubmissionAsync(entity.OwnerWorkspaceId ?? "", entity.Id, entity.Spec.EnableRepair, ct);
+                var submission = await client.GetSubmissionAsync(entity.OwnerWorkspaceId ?? "", entity.Id, entity.Spec.EnableRepair, ct,
+                    entity.Spec.FailureResearchId);
                 entity.Result.SubmissionJson = submission.ToJsonString();
                 // Persist before POST. A retry reuses the exact bindings and stable idempotency key.
                 await SaveProgressAsync(scope, entity, "Approved case bindings saved; dispatching verification.", ct);

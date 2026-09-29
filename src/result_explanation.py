@@ -118,9 +118,6 @@ def explain_public_result(result) -> dict:
 
     if not count_known or files == 0:
         next_step = "Check the scan warnings and choose a snapshot with supported source files before assessing an upgrade."
-    elif {"cognee", "strands-agents"}.issubset(names):
-        next_step = ("For this dependency set, exercise agent startup and memory write/recall with the current and proposed versions. "
-                     "These are suggested tests; the scan did not inspect those behaviors.")
     elif findings:
         next_step = "Test the flagged code with the current and proposed dependency versions, then verify any suggested change on both."
     else:

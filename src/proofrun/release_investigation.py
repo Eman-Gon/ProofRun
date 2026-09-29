@@ -16,16 +16,22 @@ from . import release_agent, release_runtime
 from .release_contracts import SCHEMA, canonical, digest, relative_path
 from .release_repository import SourceTools, excluded, snapshot
 
+ENGINE_HASHES = {name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
+                 for name in ("release_contracts.py", "release_repository.py", "release_agent.py",
+                              "release_runtime.py", "release_http_collector.py", "release_investigation.py")}
+
 
 def matches(path, patterns):
     return any(fnmatch.fnmatchcase(path, p) for p in patterns)
 
 
 class Investigation:
-    def __init__(self, target, request, directory, *, runtime=release_runtime, model=None, emit=None):
+    def __init__(self, target, request, directory, *, runtime=release_runtime, model=None, emit=None,
+                 failure_research=None):
         self.target, self.request = copy.deepcopy(target), copy.deepcopy(request)
         self.directory = Path(directory)
         self.runtime, self.model = runtime, model
+        self.failure_research = copy.deepcopy(failure_research)
         self.emit = emit or (lambda event: None)
         self.started = time.monotonic()
         self.deadline = self.started + request["budget_seconds"]
@@ -45,6 +51,7 @@ class Investigation:
 
     def prepare(self):
         self.directory.mkdir(parents=True, exist_ok=True)
+        self.write("harness-manifest.json", {"schema_version": SCHEMA, "files": ENGINE_HASHES})
         for revision in ("baseline", "candidate"):
             self.event({"stage": "snapshot", "revision": revision})
             self.roots[revision] = self.directory / revision
@@ -146,7 +153,8 @@ class Investigation:
             evidence["status"] = ("preserved" if canonical(runs["baseline"][0]["observations"]) ==
                                   canonical(runs["candidate"][0]["observations"]) else "regression")
         if evidence["status"] != "preserved":
-            finding = {"id": f"finding-{len(self.findings) + 1}", "title": args["name"],
+            evidence["finding_id"] = f"finding-{len(self.findings) + 1}"
+            finding = {"id": evidence["finding_id"], "title": args["name"],
                        "requirement_id": req["id"],
                        "status": "confirmed" if evidence["status"] == "regression" else "inconclusive",
                        "hypothesis": args["hypothesis"], "cause_status": "hypothesis_not_proven",
@@ -321,6 +329,9 @@ class Investigation:
                        "repair_enabled": self.request["repair"], "repair_paths": self.target["repair_paths"],
                        "completion_scope": "Inspect changed source; exercise at least two distinct inputs per requirement, including a successful baseline workflow. Collect independent passing controls before proposing repair. Existing baseline and candidate suites must both pass. Time or missing coverage means postpone.",
                        "benefit": self.request["benefit"], "tool_limit": 30}
+            if self.failure_research is not None:
+                context["failure_research"] = self.failure_research
+                self.write("failure-research.json", self.failure_research)
             agent = release_agent.investigate(context, self.tool, self.deadline, emit=self.event, model=self.model)
             self.check_staging()
         except TimeoutError:

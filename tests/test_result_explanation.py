@@ -12,20 +12,19 @@ def result(**changes):
 
 
 class ResultExplanationTests(unittest.TestCase):
-    def test_agent_dependencies_get_specific_coverage_and_next_step(self):
+    def test_unsupported_dependencies_get_coverage_and_next_step(self):
         explanation = explain_public_result(result(dependencies=[
-            {"name": "cognee", "version": "[aws]>=1.6.0"},
+            {"name": "example-sdk", "version": "[aws]>=1.6.0"},
             {"name": "strands-agents", "version": ">=1.56.0"},
             {"name": "python-dotenv", "version": ">=1.0"},
         ]))
         self.assertIn("4 source or manifest files", explanation["summary"])
-        for name in ("cognee", "strands-agents", "python-dotenv"):
+        for name in ("example-sdk", "strands-agents", "python-dotenv"):
             self.assertIn(name, explanation["summary"])
         self.assertIn("do not cover", explanation["summary"])
         self.assertIn("No code or tests were run", explanation["summary"])
         self.assertIn("actually installed", explanation["limits"])
-        self.assertIn("agent startup and memory write/recall", explanation["nextStep"])
-        self.assertIn("suggested tests", explanation["nextStep"])
+        self.assertIn("test the affected code", explanation["nextStep"])
         self.assertNotIn("safe", explanation["heading"].lower())
 
     def test_supported_dependencies_without_matches_do_not_imply_compatibility(self):
@@ -79,14 +78,14 @@ class ResultExplanationTests(unittest.TestCase):
 
     def test_duplicate_declarations_and_extras_are_not_extra_packages(self):
         explanation = explain_public_result(result(dependencies=[
-            {"name": "cognee[aws]", "version": ">=1"},
-            {"name": "cognee", "version": ">=2"},
+            {"name": "example-sdk[aws]", "version": ">=1"},
+            {"name": "example-sdk", "version": ">=2"},
             {"name": "strands_agents", "version": ">=1"},
         ]))
-        self.assertEqual(explanation["summary"].count("cognee"), 1)
-        self.assertIn("cognee and strands-agents", explanation["summary"])
+        self.assertEqual(explanation["summary"].count("example-sdk"), 1)
+        self.assertIn("example-sdk and strands-agents", explanation["summary"])
         self.assertNotIn("3 packages", explanation["summary"])
-        self.assertIn("memory write/recall", explanation["nextStep"])
+        self.assertIn("test the affected code", explanation["nextStep"])
 
     def test_names_are_capped_and_supported_names_not_lost(self):
         explanation = explain_public_result(result(dependencies=[{"name": f"package-{number}"} for number in range(8)]))

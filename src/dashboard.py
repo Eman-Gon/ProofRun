@@ -30,7 +30,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CASE_IDS = ("gpu-energy-pandas", "pydantic")
 OUTPUT_LIMIT = 32_000
 RUN_TIMEOUT = 180
-LIVE_RUN_TIMEOUT = 420
 INTERRUPT_GRACE = 20
 KILL_GRACE = 5
 STATIC = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),
@@ -78,92 +77,6 @@ def _file_text(path):
         return _text(path.read_text(), 24_000) if path.stat().st_size <= 24_000 else ""
     except (OSError, UnicodeError):
         return ""
-
-
-def _memory_backend(value):
-    backend = value.get("backend", "local")
-    return backend if backend in ("local", "cloud", "none") else "unknown"
-
-
-def _cloud_graph(value):
-    dataset_id = value.get("dataset_id")
-    graph = value.get("graph_summary")
-    if (not isinstance(dataset_id, str)
-            or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", dataset_id)
-            or not isinstance(graph, dict) or graph.get("dataset_id") != dataset_id
-            or any(type(graph.get(key)) is not int or graph[key] < 0 for key in ("num_nodes", "num_edges"))):
-        return None
-    return {"datasetId": dataset_id, "numNodes": graph["num_nodes"], "numEdges": graph["num_edges"]}
-
-
-def _matching_cloud_retrieval(value):
-    evidence, digest = value.get("evidence"), value.get("evidence_sha256")
-    excerpt = value.get("retrieved_excerpt")
-    if (not isinstance(evidence, dict) or not isinstance(digest, str)
-            or not re.fullmatch(r"[0-9a-f]{64}", digest) or not isinstance(excerpt, str)
-            or not re.fullmatch(r"secondlook_compatibility_[0-9a-f]{32}", str(value.get("dataset", "")))):
-        return False
-    try:
-        body = json.dumps(evidence, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-    except (TypeError, ValueError, RecursionError):
-        return False
-    frame = f"SECONDLOOK_VERIFIED_EVIDENCE_V1 {digest}\n{body}\nSECONDLOOK_VERIFIED_EVIDENCE_END {digest}"
-    return hashlib.sha256(body.encode()).hexdigest() == digest and frame in excerpt
-
-
-def _verified_cloud(value, graph):
-    return bool(graph and graph["numNodes"] > 0 and graph["numEdges"] > 0 and _matching_cloud_retrieval(value))
-
-
-def _integrations(report):
-    report = report or {}
-    source = report.get("source") if isinstance(report.get("source"), dict) else {}
-    stored = report.get("memory_verification") if isinstance(report.get("memory_verification"), dict) else {}
-    prior = report.get("prior_memory") if isinstance(report.get("prior_memory"), dict) else {}
-    memory_backend = _memory_backend(stored)
-    memory_label = {"cloud": "Cognee Cloud", "local": "Cognee local", "none": "Cognee", "unknown": "Cognee (unknown backend)"}[memory_backend]
-    graph = _cloud_graph(stored) if memory_backend == "cloud" else None
-    bright_status = "not_run"
-    if source.get("provider") == "brightdata" and re.fullmatch(r"[0-9a-f]{64}", str(source.get("content_sha256", ""))):
-        bright_status = "verified"
-    elif source.get("provider") == "direct_https" or _text(source.get("provenance")).startswith("direct HTTPS"):
-        bright_status = "fallback"
-    memory_status = "not_run"
-    if stored.get("status") == "stored_and_retrieved":
-        matches = bool(stored.get("retrieved_excerpt") and re.fullmatch(r"secondlook_compatibility_[0-9a-f]{32}", str(stored.get("dataset", ""))))
-        memory_status = "verified" if matches and (memory_backend == "local" or (memory_backend == "cloud" and _verified_cloud(stored, graph))) else "failed"
-    elif stored.get("status") == "failed":
-        memory_status = "failed"
-    elif str(report.get("memory", "")).startswith("secondlook_compatibility_"):
-        memory_status = "stored_only"
-    matches = prior.get("matches") if isinstance(prior.get("matches"), list) else []
-    recalled = next((item for item in matches if isinstance(item, dict) and item.get("retrieved_excerpt")), {})
-    prior_status = "recalled" if prior.get("status") == "recalled" and recalled else "not_found" if prior.get("status") == "not_found" else "failed" if prior.get("status") == "failed" else "not_run"
-    prior_backend = _memory_backend(recalled if "backend" in recalled else prior)
-    prior_label = {"cloud": "Cognee Cloud", "local": "Cognee local", "none": "Cognee", "unknown": "Cognee (unknown backend)"}[prior_backend]
-    prior_graph = _cloud_graph(recalled) if prior_backend == "cloud" else None
-    if prior.get("status") == "recalled" and (prior_backend in ("unknown", "none") or (prior_backend == "cloud" and not _verified_cloud(recalled, prior_graph))):
-        prior_status = "failed"
-    return {
-        "brightData": {"status": bright_status,
-                       "detail": {"verified": "Bright Data fetched the source and its supporting quote was verified.", "fallback": "Source came from direct HTTPS; Bright Data was not successful in this run.", "not_run": "No verified Bright Data source fetch in this comparison."}[bright_status],
-                       "sourceUrl": _text(source.get("source_url"), 500) or None, "checkedAt": _text(source.get("fetched_at"), 80) or None,
-                       "quote": _text(source.get("evidence_quote"), 400), "contentSha256": _text(source.get("content_sha256"), 64)},
-        "cognee": {"status": memory_status,
-                   "backend": memory_backend,
-                   "detail": {"verified": f"Finding stored and processed in {memory_label}, then retrieved by an actual search with matching evidence hash." + (" Its Cloud graph has verified nodes and edges." if graph else ""), "stored_only": f"Earlier run stored this finding in {memory_label}; retrieval was not verified.", "failed": f"{memory_label} storage, retrieval, or graph verification did not complete successfully.", "not_run": f"{memory_label} was not verified in this comparison."}[memory_status],
-                   "dataset": _text(stored.get("dataset"), 100) or None,
-                   "datasetId": (_text(stored.get("dataset_id"), 36) or None) if memory_backend == "cloud" else None,
-                   "graphSummary": graph, "graphUrl": "https://platform.cognee.ai/knowledge-graph" if memory_backend == "cloud" else None,
-                   "excerpt": _text(stored.get("retrieved_excerpt"), 6000), "checkedAt": _text(stored.get("retrieved_at"), 80) or None},
-        "priorMemory": {"status": prior_status,
-                        "backend": prior_backend,
-                        "detail": {"recalled": f"A previous matching finding was retrieved from {prior_label} and supplied to the model before this comparison.", "not_found": f"No previous verified {prior_label} memory matches this app and version pair yet.", "failed": f"Prior {prior_label} lookup or evidence verification failed; recall is not verified.", "not_run": f"Prior {prior_label} memory was not queried."}[prior_status],
-                        "dataset": _text(recalled.get("dataset"), 100) or None,
-                        "datasetId": (_text(recalled.get("dataset_id"), 36) or None) if prior_backend == "cloud" else None,
-                        "graphSummary": prior_graph, "graphUrl": "https://platform.cognee.ai/knowledge-graph" if prior_backend == "cloud" else None,
-                        "excerpt": _text(recalled.get("retrieved_excerpt"), 6000)},
-    }
 
 
 def _cell(item, *, gpu=False):
@@ -232,7 +145,6 @@ class Dashboard:
             "scope": "Two actual repository functions, using one day of synthetic data. The repository has no manifest proving its deployed pandas version." if gpu else "One self-contained customer-import fixture and this version pair; not a result from a user repository.",
             "provenance": "No measured evidence loaded.", "checkedAt": None, "checks": [], "patch": "",
             "canRun": False, "unavailableReason": None,
-            "liveSupported": not gpu, "integrations": _integrations(report) if not gpu else _integrations(None),
         }
         names = [("original", "Original code"), ("fixed", "With suggested fix")] if gpu else [
             ("existing", "Existing tests"), ("probe", "Targeted check"), ("fixed", "With suggested fix")]
@@ -302,14 +214,7 @@ class Dashboard:
         for case in cases:
             latest = next((job for job in jobs if job["caseId"] == case["id"]), None)
             if latest and latest["status"] == "failed":
-                if latest.get("mode") == "live" and latest.get("freshReport") and case["status"] == "confirmed_break":
-                    case["summary"] += " The required live integrations did not all succeed; inspect their evidence below."
-                    continue
                 case.update(status="inconclusive", summary="The latest rerun failed. Earlier stored results do not establish the outcome of this run.", checkedAt=None)
-                if latest.get("mode") == "live":
-                    case["integrations"] = _integrations(None)
-                    for key in ("brightData", "cognee"):
-                        case["integrations"][key].update(status="failed", detail="The latest live investigation failed; no new verified integration evidence is available.", excerpt="")
                 if case["id"] == "gpu-energy-pandas":
                     case["title"] = "Hourly data collection"
                 for row in case["checks"]:
@@ -367,8 +272,8 @@ class Dashboard:
     def start(self, case_id, mode="offline"):
         if case_id not in CASE_IDS:
             return 400, {"error": "Unknown caseId."}
-        if mode not in {"offline", "live"} or (mode == "live" and case_id != "pydantic"):
-            return 400, {"error": "Live integration runs are available for the Pydantic case only."}
+        if mode != "offline":
+            return 400, {"error": "Only offline comparisons are available in this dashboard."}
         with self.lock:
             if self.stopping.is_set() or any(job["status"] == "running" for job in self.jobs):
                 return 409, {"error": "A comparison is already running or the server is stopping."}
@@ -390,9 +295,7 @@ class Dashboard:
 
     def _work(self, job, before):
         gpu = job["caseId"] == "gpu-energy-pandas"
-        command = [sys.executable, str(self.root / ".commit-watch/repo-audit/gpu-energy-pandas/reproduce.py")] if gpu else [sys.executable, "-m", "src.main", "upgrade-demo", "--offline", "--no-memory"]
-        if job.get("mode") == "live":
-            command = [sys.executable, "-m", "src.main", "upgrade-demo", "--require-integrations"]
+        command = [sys.executable, str(self.root / ".commit-watch/repo-audit/gpu-energy-pandas/reproduce.py")] if gpu else [sys.executable, "-m", "src.main", "upgrade-demo", "--offline"]
         code = None
         succeeded = False
         try:
@@ -400,9 +303,6 @@ class Dashboard:
             fresh = self._signature(job["caseId"]) != before
             job["freshReport"] = fresh
             succeeded = code == (0 if gpu else 1) and fresh and self.case(job["caseId"])["status"] == "confirmed_break"
-            if succeeded and job.get("mode") == "live":
-                evidence = self.case(job["caseId"])["integrations"]
-                succeeded = all(evidence[key]["status"] == "verified" for key in ("brightData", "cognee"))
             if not fresh:
                 self._append(job, "\nNo new evidence report was produced.\n")
         except Exception as exc:
@@ -417,13 +317,12 @@ class Dashboard:
         env.update(PYTHONUNBUFFERED="1", PYTHONDONTWRITEBYTECODE="1", TELEMETRY_DISABLED="true", LOG_LEVEL="ERROR")
         with subprocess.Popen(command, cwd=self.root, env=env, stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT, start_new_session=True) as process:
-            limit = LIVE_RUN_TIMEOUT if "--require-integrations" in command else RUN_TIMEOUT
-            deadline = time.monotonic() + limit
+            deadline = time.monotonic() + RUN_TIMEOUT
             with selectors.DefaultSelector() as selector:
                 selector.register(process.stdout, selectors.EVENT_READ)
                 while selector.get_map() or process.poll() is None:
                     if self.stopping.is_set() or time.monotonic() >= deadline:
-                        emit(f"\nRun cancelled or exceeded the {limit}-second limit.\n")
+                        emit(f"\nRun cancelled or exceeded the {RUN_TIMEOUT}-second limit.\n")
                         # SIGINT lets both reviewed Python runners execute container cleanup.
                         try:
                             os.killpg(process.pid, signal.SIGINT)

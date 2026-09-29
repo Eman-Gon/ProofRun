@@ -38,6 +38,19 @@ public partial class ProofRunController : ResourcesController<ProofRunVerificati
     }
 
     // The inherited resource filter authorizes this existing resource. A research request never updates a verdict.
+    [HttpPost("{id}/failure-research")]
+    [RequestSizeLimit(16000)]
+    public async Task<IActionResult> FailureResearch(string workspaceId, string id,
+        [FromBody] FailureResearchRequest request, CancellationToken ct)
+    {
+        var entity = await ResourceServiceFacet.GetByIdAsync(id, ct);
+        if (entity is null || !string.Equals(entity.OwnerWorkspaceId, workspaceId, StringComparison.Ordinal)) return NotFound();
+        try { return Ok(new { data = await _service.FetchFailureResearchAsync(entity, request, ct) }); }
+        catch (FileNotFoundException) { return NotFound(); }
+        catch (ArgumentException ex) { return BadRequest(new { errors = ex.Message }); }
+        catch (ProofRunBridgeException ex) { return StatusCode(502, new { errors = ex.Message }); }
+    }
+
     [HttpPost("{id}/research")]
     public async Task<IActionResult> Research(string workspaceId, string id,
         [FromBody] ProofRunResearchRequest request, CancellationToken ct)

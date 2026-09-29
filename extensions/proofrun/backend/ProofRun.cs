@@ -17,6 +17,7 @@ public class ProofRunSpec : BaseSpec
 {
     public string CaseId { get; set; } = ProofRunWorkerClient.CaseId;
     public bool EnableRepair { get; set; }
+    public string? FailureResearchId { get; set; }
 }
 
 [BsonIgnoreExtraElements]
@@ -60,6 +61,10 @@ public class ProofRunService : ResourceServiceBase<ProofRunVerification, ProofRu
             throw new ArgumentException("Only the registered customer-nickname-v1 case is supported.");
         if (isUpdate && existingSpec is not null && existingSpec.EnableRepair != spec.EnableRepair)
             throw new ArgumentException("Create a fresh verification to change whether repair is requested.");
+        if (spec.FailureResearchId is not null && (!spec.EnableRepair || !FailureResearchReport.IsId(spec.FailureResearchId)))
+            throw new ArgumentException("Select completed failure research and enable a fresh repair check.");
+        if (isUpdate && existingSpec is not null && existingSpec.FailureResearchId != spec.FailureResearchId)
+            throw new ArgumentException("Create a fresh verification to use different failure research.");
     }
 
     public async Task<byte[]> FetchArtifactAsync(ProofRunVerification entity, string artifactId,
@@ -79,5 +84,14 @@ public class ProofRunService : ResourceServiceBase<ProofRunVerification, ProofRu
     {
         using var client = ProofRunWorkerClient.FromConfiguration(_config);
         return await client.ResearchAsync(entity.OwnerWorkspaceId ?? "", entity.Id, request, ct);
+    }
+
+    public async Task<JsonObject> FetchFailureResearchAsync(ProofRunVerification entity, FailureResearchRequest request,
+        CancellationToken ct)
+    {
+        if (entity.Result?.RunId is not { Length: > 0 } runId)
+            throw new FileNotFoundException("This resource has no worker run yet.");
+        using var client = ProofRunWorkerClient.FromConfiguration(_config);
+        return await client.FailureResearchAsync(entity.OwnerWorkspaceId ?? "", entity.Id, runId, request, ct);
     }
 }

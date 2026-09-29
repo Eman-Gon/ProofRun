@@ -6,6 +6,8 @@ import { extractErrorMessage } from '@duplocloud-internal/ng-common-lib';
 import { ProofRunResource, ProofRunService, RunSummary } from './proofrun.service';
 import { buildMeetingBrief, buildReleaseAssessment } from './release-summary';
 import { CustomerResearch, CustomerResearchRequest, metricLabel, previousCompleteMonth, researchRequest, researchStatusText, safeResearchSource } from './customer-research';
+import { FailureResearchComponent } from './failure-research.component';
+import { FailureResearch, fixtureFailureQuery } from './failure-research';
 
 interface ResearchSession {
   pending: boolean;
@@ -17,7 +19,7 @@ interface ResearchSession {
 @Component({
   selector: 'proofrun-verification',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FailureResearchComponent],
   styleUrl: './proofrun.component.scss',
   template: `
     <main class="proofrun-page">
@@ -133,6 +135,13 @@ interface ResearchSession {
                 <div><span>Repair</span><strong>{{ label(run.repair_status) }}</strong></div>
               </div>
               <p class="muted">Completion describes workflow execution; the finding and repair verdicts are separate.</p>
+              @if (run.finding_status === 'regression_reproduced') {
+                <proofrun-failure-research kind="fixture" [resourceId]="resource.id" [runId]="run.run_id"
+                  findingId="regression" findingTitle="The worker reproduced a regression in the registered customer import fixture."
+                  [initialQuery]="failureQuery(run)" [repairAvailable]="run.repair_status !== 'unavailable'" [repairBusy]="starting()"
+                  repairUnavailableReason="The worker reported that repair is unavailable. Restore the configured model before retrying; the research brief is available for engineering review."
+                  (repairRequested)="repairWithResearch($event)"></proofrun-failure-research>
+              }
               @if (run.coordination?.provider === 'band') {
                 <div class="coordination">
                   <h3>BAND repair handoff</h3>
@@ -219,6 +228,7 @@ export class ProofRunComponent implements OnInit {
   protected readonly metricLabel = metricLabel;
   protected readonly researchStatusText = researchStatusText;
   protected readonly safeResearchSource = safeResearchSource;
+  protected readonly failureQuery = fixtureFailureQuery;
   protected readonly approvedExamples = [
     { id: 'nickname_omitted', name: 'Nickname omitted', input: '{"name":"Grace"}', expected: 'Accept; nickname is null.' },
     { id: 'nickname_null', name: 'Nickname is null', input: '{"name":"Grace","nickname":null}', expected: 'Accept; keep null.' },
@@ -258,10 +268,11 @@ export class ProofRunComponent implements OnInit {
     });
   }
 
-  protected start(): void {
+  protected start(failureResearchId?: string): void {
+    if (this.starting()) return;
     this.starting.set(true);
     this.error.set('');
-    this.service.run(this.requestRepair()).subscribe({
+    this.service.run(failureResearchId ? true : this.requestRepair(), failureResearchId).subscribe({
       next: resource => {
         this.starting.set(false);
         this.loadList();
@@ -269,6 +280,12 @@ export class ProofRunComponent implements OnInit {
       },
       error: err => { this.starting.set(false); this.error.set(extractErrorMessage(err)); },
     });
+  }
+
+  protected repairWithResearch(research: FailureResearch): void {
+    if (research.context.kind !== 'fixture' || research.context.run_id !== this.summary()?.run_id
+        || research.context.finding_id !== 'regression' || research.status !== 'completed') return;
+    this.start(research.research_id);
   }
 
   protected select(id: string): void {

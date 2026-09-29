@@ -63,7 +63,6 @@
       <div class="project-controls">
         <div class="project-field"><label for="project-select">Saved scans &amp; prepared comparisons</label><select id="project-select" disabled><option>Loading saved checks…</option></select></div>
         <button class="button primary" id="run-button" disabled>Run comparison</button>
-        <button class="button secondary" id="live-run-button" disabled hidden>Run live investigation</button>
       </div>
       <p class="controls-note" id="run-note">Prepared comparisons run locally in Docker.</p>
       <div id="loading" class="loading-state" role="status">Loading saved results…</div>
@@ -103,11 +102,6 @@
             <p id="fix-description"></p>
             <div class="diff-card"><div class="diff-header"><span id="fix-path"></span><span id="fix-lines"></span></div><div class="diff-code"><div class="diff-line removed"><span aria-label="Remove">−</span><code id="before-code"></code></div><div class="diff-line added"><span aria-label="Add">+</span><code id="after-code"></code></div></div></div>
             <p id="fix-verification" class="fix-note"></p>
-          </section>
-          <section class="integration-section" id="integration-section" hidden aria-labelledby="integration-title">
-            <h3 id="integration-title">Source and memory evidence</h3>
-            <p class="integration-note">Service evidence is separate from the Docker result. An offline comparison does not refresh these services.</p>
-            <div id="integration-list" class="integration-list"></div>
           </section>
           <div class="supporting-details">
             <details class="disclosure" id="test-details"><summary>Test output</summary><div id="evidence-list" class="disclosure-content"></div></details>

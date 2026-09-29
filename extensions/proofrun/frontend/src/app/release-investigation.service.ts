@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, defer, map } from 'rxjs';
+import type { FailureResearch } from './failure-research';
 
 export interface ReleaseTarget {
   id: string;
@@ -17,6 +18,7 @@ export interface ReleaseInvestigationRequest {
   budget_seconds: number;
   repair: boolean;
   event_id?: string;
+  failure_research_id?: string;
 }
 
 export interface ReleaseInvestigationResult {
@@ -29,6 +31,8 @@ export interface ReleaseInvestigationResult {
     title: string;
     requirement_id: string;
     status: 'confirmed' | 'inconclusive';
+    hypothesis?: string;
+    cause_status?: string;
     evidence: Record<string, unknown>;
     repair?: { status: string; [key: string]: unknown };
   }[];
@@ -36,7 +40,7 @@ export interface ReleaseInvestigationResult {
   agent?: { status: string; summary?: string };
   staging?: { status: string; [key: string]: unknown };
   limitations?: string[];
-  artifacts?: unknown[];
+  artifacts?: { id: string; sha256: string; bytes: number }[];
 }
 
 export interface ReleaseInvestigation {
@@ -86,6 +90,29 @@ export class ReleaseInvestigationService {
     return defer(() => this.http.get(`${this.base()}/${encodeURIComponent(id)}`)).pipe(map(response => this.readRun(response)));
   }
 
+  failureResearch(runId: string, findingId: string, requestId: string, query: string): Observable<FailureResearch> {
+    return defer(() => this.http.post(`${this.base()}/${encodeURIComponent(runId)}/failure-research`, {
+      request_id: requestId, query, finding_id: findingId,
+    })).pipe(map(response => this.unwrap(response)));
+  }
+
+  artifact(runId: string, artifactId: string): Observable<{ fileName: string; base64: string }> {
+    return defer(() => {
+      if (!/^release-[a-f0-9]{40}$/.test(runId) || artifactId.length > 128 || !/^[a-z0-9-]+\.(json|diff)$/.test(artifactId)) {
+        throw new Error('Select an evidence file listed for this investigation.');
+      }
+      return this.http.get(`${this.base()}/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`);
+    }).pipe(map(response => {
+      const artifact = this.unwrap(response);
+      const maxBase64Length = Math.ceil(16 * 1024 * 1024 / 3) * 4;
+      if (!artifact || artifact.fileName !== artifactId || typeof artifact.base64 !== 'string'
+          || artifact.base64.length > maxBase64Length || artifact.base64.length % 4 !== 0) {
+        throw new Error('The evidence download response is invalid or exceeds the 16 MiB limit.');
+      }
+      return { fileName: artifact.fileName, base64: artifact.base64 };
+    }));
+  }
+
   private readRun(response: unknown): ReleaseInvestigation {
     const run = this.unwrap(response);
     if (!run || typeof run.id !== 'string' || !['queued', 'running', 'completed', 'failed'].includes(run.status)
@@ -96,7 +123,14 @@ export class ReleaseInvestigationService {
         || (run.result && (typeof run.result !== 'object'
           || (run.result.findings !== undefined && !Array.isArray(run.result.findings))
           || run.result.findings?.some((finding: any) => !finding || typeof finding.title !== 'string'
-            || typeof finding.requirement_id !== 'string' || typeof finding.status !== 'string')
+            || typeof finding.requirement_id !== 'string' || typeof finding.status !== 'string'
+            || (finding.hypothesis !== undefined && typeof finding.hypothesis !== 'string')
+            || (finding.cause_status !== undefined && typeof finding.cause_status !== 'string'))
+          || (run.result.artifacts !== undefined && (!Array.isArray(run.result.artifacts)
+            || run.result.artifacts.some((artifact: any) => !artifact || typeof artifact.id !== 'string'
+              || artifact.id.length > 128 || !/^[a-z0-9-]+\.(json|diff)$/.test(artifact.id)
+              || typeof artifact.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(artifact.sha256)
+              || !Number.isInteger(artifact.bytes) || artifact.bytes < 0 || artifact.bytes > 16 * 1024 * 1024)))
           || (run.result.limitations !== undefined && !Array.isArray(run.result.limitations))))) {
       throw new Error('The server returned an unsupported investigation result. No release recommendation was inferred.');
     }

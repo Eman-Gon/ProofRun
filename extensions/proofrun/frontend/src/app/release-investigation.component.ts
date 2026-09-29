@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EMPTY, Subscription, catchError, exhaustMap, takeWhile, timeout, timer } from 'rxjs';
 import { extractErrorMessage } from '@duplocloud-internal/ng-common-lib';
+import { FailureResearchComponent } from './failure-research.component';
+import { FailureResearch } from './failure-research';
 import {
   ReleaseInvestigation, ReleaseInvestigationRequest, ReleaseInvestigationService, ReleaseTarget,
 } from './release-investigation.service';
@@ -11,7 +13,7 @@ import {
 @Component({
   selector: 'proofrun-release-investigation',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FailureResearchComponent],
   styleUrl: './release-investigation.component.scss',
   template: `
     <main class="release-page">
@@ -133,17 +135,39 @@ import {
                 <article class="finding">
                   <div class="section-heading"><h4>{{ finding.title }}</h4><span class="status">{{ label(finding.status) }}</span></div>
                   <p class="muted">Requirement <code>{{ finding.requirement_id }}</code></p>
+                  <p><strong>Cause status:</strong> {{ label(finding.cause_status) }}</p>
+                  @if (finding.hypothesis) { <p><strong>Cause hypothesis:</strong> {{ finding.hypothesis }}</p> }
+                  <p class="field-help">A confirmed behavior change does not by itself prove its cause or introducing commit.</p>
                   @if (finding.repair) {
                     <p><strong>Repair:</strong> {{ label(finding.repair.status) }}</p>
                     <p class="field-help">A repair result does not change what was observed in the original candidate commit.</p>
                   }
                   <details><summary>Finding evidence</summary><pre>{{ finding.evidence | json }}</pre></details>
                   @if (finding.repair) { <details><summary>Repair evidence</summary><pre>{{ finding.repair | json }}</pre></details> }
+                  @if (finding.status === 'confirmed' && finding.id) {
+                    <proofrun-failure-research kind="release" [runId]="current.id" [findingId]="finding.id"
+                      [findingTitle]="finding.title" [repairAvailable]="repairAvailable(current)" [repairBusy]="submitting()"
+                      (repairRequested)="repairWithResearch($event)"></proofrun-failure-research>
+                  }
                 </article>
               }
               <h3>Limitations</h3>
               @if (!result.limitations?.length) { <p class="muted">No additional limitations were reported. Scope remains limited to the recorded checks.</p> }
               <ul>@for (limitation of result.limitations; track $index) { <li>{{ limitation }}</li> }</ul>
+              <h3>Evidence downloads</h3>
+              @if (artifactError()) { <p class="error" role="alert">{{ artifactError() }}</p> }
+              @if (!result.artifacts?.length) { <p class="muted">No downloadable evidence has been reported yet.</p> }
+              @for (artifact of result.artifacts; track artifact.id) {
+                <div class="finding">
+                  <div class="section-heading"><strong>{{ artifact.id }}</strong>
+                    <button type="button" class="secondary" (click)="downloadArtifact(artifact.id)" [disabled]="!!downloadingArtifact()">
+                      {{ downloadingArtifact() === artifact.id ? 'Checking download…' : 'Download' }}
+                    </button>
+                  </div>
+                  <p class="muted">{{ artifact.bytes | number }} bytes · SHA-256 <code>{{ artifact.sha256 }}</code></p>
+                </div>
+              }
+              <p class="field-help">Experiments contain the measured requests and responses. Repair diffs are reviewable proposals; downloading a file does not apply or deploy it.</p>
               <details><summary>Recorded result and artifact references</summary><pre>{{ result | json }}</pre></details>
             }
           } @else if (!observationError()) {
@@ -166,6 +190,8 @@ export class ReleaseInvestigationComponent implements OnInit {
   protected readonly configurationError = signal('');
   protected readonly submissionError = signal('');
   protected readonly observationError = signal('');
+  protected readonly artifactError = signal('');
+  protected readonly downloadingArtifact = signal('');
   protected readonly pollingStopped = signal('');
   protected readonly submitting = signal(false);
   protected readonly observing = signal(false);
@@ -183,6 +209,7 @@ export class ReleaseInvestigationComponent implements OnInit {
   private params?: Subscription;
   private configuration?: Subscription;
   private submission?: Subscription;
+  private artifactRequest?: Subscription;
 
   ngOnInit(): void {
     this.loadTargets();
@@ -196,11 +223,15 @@ export class ReleaseInvestigationComponent implements OnInit {
         this.observing.set(false);
         this.observationError.set('');
         this.pollingStopped.set('');
+        this.artifactRequest?.unsubscribe();
+        this.artifactError.set('');
+        this.downloadingArtifact.set('');
       }
     });
     this.destroyRef.onDestroy(() => {
       this.poll?.unsubscribe(); this.params?.unsubscribe();
       this.configuration?.unsubscribe(); this.submission?.unsubscribe();
+      this.artifactRequest?.unsubscribe();
     });
   }
 
@@ -249,11 +280,33 @@ export class ReleaseInvestigationComponent implements OnInit {
       benefit: this.benefit.trim(), budget_seconds: this.budgetSeconds, repair: this.repair && target.repair_enabled,
       ...(this.eventId.trim() ? { event_id: this.eventId.trim() } : {}),
     };
+    this.submitRun(request);
+  }
+
+  protected repairAvailable(run: ReleaseInvestigation): boolean {
+    return this.targets().some(target => target.id === run.request.target_id && target.repair_enabled);
+  }
+
+  protected repairWithResearch(research: FailureResearch): void {
+    const run = this.run();
+    if (!run || this.submitting() || !this.repairAvailable(run) || research.status !== 'completed'
+        || research.context.kind !== 'release' || research.context.run_id !== run.id
+        || !run.result?.findings?.some(finding => finding.id === research.context.finding_id && finding.status === 'confirmed')) return;
+    // A repair is a fresh run, never a replay of the deployment/event identity.
+    const { event_id, failure_research_id, ...request } = run.request;
+    this.submissionError.set('');
+    this.submitRun({ ...request, repair: true, failure_research_id: research.research_id });
+  }
+
+  private submitRun(request: ReleaseInvestigationRequest): void {
     this.submitting.set(true);
     this.submission = this.service.submit(request).pipe(timeout(30000)).subscribe({
       next: run => {
         this.submitting.set(false);
         this.poll?.unsubscribe();
+        this.artifactRequest?.unsubscribe();
+        this.downloadingArtifact.set('');
+        this.artifactError.set('');
         this.run.set(run);
         this.selectedId.set(run.id);
         this.observedAt.set(new Date().toISOString());
@@ -277,7 +330,10 @@ export class ReleaseInvestigationComponent implements OnInit {
 
   private observe(id: string): void {
     this.poll?.unsubscribe();
-    if (this.run()?.id !== id) { this.run.set(undefined); this.observedAt.set(undefined); }
+    if (this.run()?.id !== id) {
+      this.run.set(undefined); this.observedAt.set(undefined);
+      this.artifactRequest?.unsubscribe(); this.downloadingArtifact.set(''); this.artifactError.set('');
+    }
     this.selectedId.set(id);
     this.observationError.set('');
     this.pollingStopped.set('');
@@ -308,6 +364,52 @@ export class ReleaseInvestigationComponent implements OnInit {
       complete: () => {
         this.observing.set(false);
         this.pollingStopped.set('Automatic refresh reached its observation limit. This does not stop the worker or establish a result. Refresh to retrieve its current status.');
+      },
+    });
+  }
+
+  protected downloadArtifact(artifactId: string): void {
+    if (this.downloadingArtifact()) return;
+    const run = this.run();
+    const matches = run?.result?.artifacts?.filter(artifact => artifact.id === artifactId) ?? [];
+    if (!run || matches.length !== 1) {
+      this.artifactError.set('Select an evidence file listed once in the current investigation.');
+      return;
+    }
+    const expected = matches[0];
+    this.artifactError.set('');
+    this.downloadingArtifact.set(artifactId);
+    this.artifactRequest = this.service.artifact(run.id, artifactId).pipe(timeout(30000)).subscribe({
+      next: async artifact => {
+        try {
+          const decoded = atob(artifact.base64);
+          if (decoded.length > 16 * 1024 * 1024 || decoded.length !== expected.bytes) {
+            throw new Error('The downloaded file size does not match the recorded evidence.');
+          }
+          const bytes = Uint8Array.from(decoded, character => character.charCodeAt(0));
+          if (!globalThis.crypto?.subtle) throw new Error('Evidence verification requires a secure browser context.');
+          const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+          const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+          if (hash !== expected.sha256) throw new Error('The downloaded file hash does not match the recorded evidence.');
+          if (this.run()?.id !== run.id || this.destroyRef.destroyed) return;
+          const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = artifactId;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (error) {
+          if (this.run()?.id === run.id && !this.destroyRef.destroyed) {
+            this.artifactError.set(error instanceof Error && error.name !== 'InvalidCharacterError'
+              ? error.message : 'The evidence response could not be decoded.');
+          }
+        } finally {
+          if (this.run()?.id === run.id && !this.destroyRef.destroyed) this.downloadingArtifact.set('');
+        }
+      },
+      error: error => {
+        this.downloadingArtifact.set('');
+        this.artifactError.set(this.errorText(error));
       },
     });
   }

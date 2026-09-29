@@ -1,12 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import type { CustomerResearch, CustomerResearchRequest } from './customer-research';
+import type { FailureResearch } from './failure-research';
 
 const REST_SEGMENT = 'extensions/proofruns';
 
 export interface RunSummary {
   schema_version: string;
   run_id: string;
+  case_id?: string;
   execution_status: string;
   finding_status: string;
   repair_status: string;
@@ -15,6 +17,7 @@ export interface RunSummary {
   proposal?: { mode?: string; gateway?: string; model?: string; [key: string]: unknown };
   coordination?: { provider: 'band'; mode: 'live' | 'mock'; status: string; room_id?: string; handoff_id?: string; [key: string]: unknown };
   cases?: { id?: string; stage?: string; status?: string; [key: string]: unknown }[];
+  environments?: Record<string, { observed_version?: string; [key: string]: unknown }>;
   artifacts?: { id: string; sha256: string; size_bytes: number }[];
   limitations?: string[];
 }
@@ -55,10 +58,12 @@ export class ProofRunService {
     return this.http.get(`${this.base()}/${encodeURIComponent(id)}`).pipe(map(this.unwrap));
   }
 
-  run(enableRepair: boolean): Observable<ProofRunResource> {
+  run(enableRepair: boolean, failureResearchId?: string): Observable<ProofRunResource> {
     // A fresh resource is a fresh run. The backend derives retry identity from its stored resource ID.
     const name = `verification-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-    return this.http.post(this.base(), { name, spec: { caseId: 'customer-nickname-v1', enableRepair } }).pipe(map(this.unwrap));
+    return this.http.post(this.base(), { name, spec: { caseId: 'customer-nickname-v1', enableRepair,
+      ...(failureResearchId ? { failureResearchId } : {}),
+    } }).pipe(map(this.unwrap));
   }
 
   artifact(resourceId: string, artifactId: string): Observable<{ fileName: string; base64: string }> {
@@ -72,5 +77,9 @@ export class ProofRunService {
 
   research(resourceId: string, request: CustomerResearchRequest): Observable<CustomerResearch> {
     return this.http.post(`${this.researchScope(resourceId)}/research`, request).pipe(map(this.unwrap));
+  }
+
+  failureResearch(resourceId: string, clientNonce: string, query: string): Observable<FailureResearch> {
+    return this.http.post(`${this.researchScope(resourceId)}/failure-research`, { clientNonce, query }).pipe(map(this.unwrap));
   }
 }
