@@ -12,6 +12,28 @@ def result(**changes):
 
 
 class ResultExplanationTests(unittest.TestCase):
+    def test_agent_explanation_uses_actual_coverage_without_package_allowlist(self):
+        explanation = explain_public_result(result(dependencies=[{"name": "arbitrary-crate", "ecosystem": "cargo", "version": "2"}],
+            review={"status": "completed", "filesRead": ["src/lib.rs"]}))
+        self.assertEqual(explanation["heading"], "No concrete issues reported by this review")
+        self.assertIn("1 of 4", explanation["summary"])
+        self.assertIn("does not establish", explanation["summary"])
+        self.assertNotIn("pandas", str(explanation))
+        self.assertNotIn("do not cover these packages", str(explanation))
+
+    def test_unavailable_agent_is_not_reported_as_zero_issues(self):
+        explanation = explain_public_result(result(review={"status": "unavailable", "filesRead": []}))
+        self.assertEqual(explanation["heading"], "Agent review unavailable")
+        self.assertIn("did not complete", explanation["summary"])
+        self.assertIn("No repository code or tests were run", explanation["limits"])
+
+    def test_agent_findings_and_auxiliary_patterns_stay_separate(self):
+        explanation = explain_public_result(result(review={"status": "completed", "filesRead": ["app.go"]}, findings=[
+            {"origin": "agent", "file": "app.go", "line": 2}, {"origin": "pattern", "file": "legacy.py", "line": 4}]))
+        self.assertEqual(explanation["heading"], "1 potential issue to review")
+        self.assertIn("1 separate static migration hint", explanation["summary"])
+        self.assertIn("have not been reproduced", explanation["summary"])
+
     def test_unsupported_dependencies_get_coverage_and_next_step(self):
         explanation = explain_public_result(result(dependencies=[
             {"name": "example-sdk", "version": "[aws]>=1.6.0"},

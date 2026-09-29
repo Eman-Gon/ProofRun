@@ -298,6 +298,29 @@ import { getLCP } from 'other-library';
             with self.assertRaisesRegex(public.PublicRepoError, "publicly visible"):
                 public.inspect_public_repo("owner/repo")
 
+    def test_expired_agent_review_keeps_partial_report_but_cancellation_wins(self):
+        for cancel in (False, True):
+            with self.subTest(cancel=cancel):
+                cancelled = Event()
+                budget = public._Budget(cancelled)
+                def review(*args, **kwargs):
+                    budget.deadline = 0
+                    if cancel:
+                        cancelled.set()
+                    return [], {"status": "partial", "summary": "Agent review reached its time limit.",
+                                "steps": 1, "filesRead": ["app.go"], "provenance": []}
+                with patch.object(public, "_Budget", return_value=budget), \
+                        patch.object(public, "_json", side_effect=[{"private": False, "default_branch": "main"}, {"sha": SHA}]), \
+                        patch.object(public, "_fetch", return_value=archive({"snapshot/app.go": "package main"})), \
+                        patch.object(public, "review_repository", side_effect=review):
+                    if cancel:
+                        with self.assertRaisesRegex(public.PublicRepoError, "cancelled"):
+                            public.inspect_public_repo("owner/repo", cancelled=cancelled)
+                    else:
+                        result = public.inspect_public_repo("owner/repo")
+                        self.assertEqual(result["review"]["status"], "partial")
+                        self.assertEqual(result["filesScanned"], 1)
+
     def test_redirect_and_request_host_restrictions(self):
         for url in ["http://api.github.com/x", "https://evil.test/x", "https://api.github.com.evil.test/x", "https://token@api.github.com/x", "https://api.github.com:443/x", "https://127.0.0.1/x", "https://[invalid"]:
             with self.subTest(url=url), self.assertRaises(public.PublicRepoError):

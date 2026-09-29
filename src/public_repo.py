@@ -108,11 +108,14 @@ class _Budget:
         self.timeout_message = timeout_message or "Repository inspection exceeded the 90-second time limit. Try a smaller repository."
 
     def check(self):
+        self.check_cancelled()
+        if time.monotonic() >= self.deadline:
+            raise PublicRepoError(self.timeout_message)
+
+    def check_cancelled(self):
         cancelled = self.cancelled
         if cancelled and (cancelled() if callable(cancelled) else cancelled.is_set()):
             raise PublicRepoError("Repository inspection was cancelled.")
-        if time.monotonic() >= self.deadline:
-            raise PublicRepoError(self.timeout_message)
 
     def timeout(self):
         self.check()
@@ -507,7 +510,10 @@ def inspect_public_repo(value, emit=None, cancelled=None) -> dict:
              "At most 300 UTF-8 source/configuration/documentation files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. "
              "Agent review is limited to 12 decisions and 65 seconds within the scan deadline. No findings does not establish correctness or upgrade compatibility. "
              "Proposed changes are suggestions only and are not applied.")
-    budget.check()
+    # The model can consume the remaining deadline and return an explicit
+    # partial review. Finalization performs no more source/model operations;
+    # keep that useful report while still honoring user cancellation.
+    budget.check_cancelled()
     result = {"repository": repository, "repoUrl": f"https://github.com/{repository}", "commit": commit,
             "checkedAt": datetime.now(timezone.utc).isoformat(), "dependencies": dependencies,
             "findings": findings, "filesScanned": len(files), "scope": scope, "warnings": warnings, "review": review}

@@ -7,9 +7,12 @@ chooses reads and searches; only this module can accept a source-bound finding.
 import hashlib
 import json
 import os
+from pathlib import PurePosixPath
+import re
 import time
 from urllib.parse import quote
 
+from .dependencies import is_dependency_file
 from .proofrun.config import ConfigurationError, RepairConfig
 from .proofrun.release_agent import (
     _CREDENTIAL, _ModelFailure, _live_model, _public_provenance, _redact,
@@ -45,6 +48,9 @@ Return one JSON action with exactly tool, arguments, reason. Available tools:
   confidence: 'high'|'medium', reproduction: string}]}
 Finish with at most 8 findings. beforeCode must match the exact source starting
 at line, including indentation; explicitly read every referenced line first.
+Before finish you MUST use read_file on at least one available file, including
+README or documentation when the repository has no executable source. A file
+listing or search alone does not establish review coverage.
 Each beforeCode and afterCode must fit 4000 UTF-8 bytes. Use an empty afterCode
 when no small reliable change is available. Include a fix only when it preserves
 the surrounding contract; never alter tests or dependency pins to hide a bug.
@@ -87,10 +93,15 @@ def _accept_findings(rows, files, reads, repository, commit):
         source_lines = files[path].splitlines(keepends=True)
         end_line = line + len(before.splitlines()) - 1
         first_line = before.splitlines()[0]
-        if (line > len(source_lines) or not source_lines[line - 1].startswith(first_line)
+        if (not first_line.strip() or line > len(source_lines) or source_lines[line - 1].count(first_line) != 1
+                or not source_lines[line - 1].startswith(first_line)
                 or not "".join(source_lines[line - 1:]).startswith(before)
                 or not set(range(line, end_line + 1)) <= reads.get(path, set())):
             raise ValueError("Finding excerpt is not grounded in read source.")
+        parts = PurePosixPath(path.lower()).parts
+        if (is_dependency_file(path) or any(part in {"test", "tests", "__tests__", "spec", "specs"} for part in parts[:-1])
+                or re.search(r"(?:^test_|_test\.|[.]test[.]|[.]spec[.])", parts[-1])):
+            after = ""  # Findings may cite tests, but never propose changing acceptance evidence.
         if (path, line) in locations:
             continue
         locations.add((path, line))
@@ -115,15 +126,19 @@ def review_repository(files, repository, commit, *, deadline, emit=None, model=N
     """
     deadline = min(deadline, time.monotonic() + MAX_REVIEW_SECONDS)
     reads, provenance, steps = {}, [], 0
+    empty_finish_corrected = format_corrected = False
     known_secrets = tuple(value for key, value in os.environ.items()
                           if any(word in key for word in ("KEY", "TOKEN", "PASSWORD", "SECRET")) and len(value) >= 8)
     # Omit files containing a configured secret or recognizable bearer token;
     # redaction would break the source hash/excerpt contract for patch creation.
+    available_count = len(files)
     files = {path: body for path, body in files.items() if _redact(body, known_secrets) == body}
+    omitted_sensitive = available_count - len(files)
 
     def done(status, summary, findings=None):
         return findings or [], {"status": status, "summary": summary, "steps": steps,
-                                "filesRead": sorted(reads), "provenance": provenance}
+                                "filesRead": sorted(reads), "provenance": provenance,
+                                "sensitiveFilesOmitted": omitted_sensitive}
 
     try:
         if model is None:
@@ -147,9 +162,32 @@ def review_repository(files, repository, commit, *, deadline, emit=None, model=N
                 return done("partial", "Agent review reached its time limit before completion.")
             if len(_json(messages).encode()) > MAX_PROMPT_BYTES:
                 return done("partial", "Agent review reached its source context limit before completion.")
+            finish_only = (bool(reads) and remaining <= 20) or steps == MAX_DECISIONS
+            decision_messages = messages
+            if finish_only:
+                decision_messages = messages + [{"role": "system", "content": (
+                    "The runtime has reserved the remaining budget for finalization. You MUST now use finish with only "
+                    "findings grounded in source you have already read. No more read_file, list_files, search, or other "
+                    "tools are permitted. Use an empty findings list if no concrete issue is supported. Acknowledge "
+                    "limited coverage in your summary; do not claim repository correctness. Return the required JSON action.") }]
             if callable(emit):
                 emit(f"Agent review: inspecting repository evidence (step {steps}/{MAX_DECISIONS})…")
-            reply = model(messages, min(45, remaining)) if model else _live_model(config, messages, min(config.timeout_seconds, remaining))
+            try:
+                reply = model(decision_messages, min(45, remaining)) if model else _live_model(config, decision_messages, min(config.timeout_seconds, remaining))
+            except _ModelFailure as error:
+                if (not format_corrected and error.provenance.get("error_code") in
+                        {"decision_json_invalid", "decision_arguments_json_invalid"}
+                        and steps < MAX_DECISIONS and time.monotonic() + 1 < deadline):
+                    provenance.append({"step": steps, "status": "invalid_format", **_public_provenance(
+                        error.provenance, injected=model is not None)})
+                    format_corrected = True
+                    messages.append({"role": "system", "content": (
+                        "The previous decision was rejected because its JSON or arguments JSON was malformed. No tool ran. "
+                        "Choose a fresh decision within the remaining budget. Follow the required wire encoding: exactly "
+                        "tool, arguments, reason, where arguments is a STRING containing one strict JSON object. "
+                        "Escape embedded quotes/newlines correctly. Do not add Markdown or prose outside JSON.")})
+                    continue
+                raise
             if time.monotonic() >= deadline:
                 return done("partial", "Agent review response arrived after its time limit.")
             _keys(reply, {"action", "provenance"})
@@ -161,10 +199,21 @@ def review_repository(files, repository, commit, *, deadline, emit=None, model=N
                 raise ValueError("Invalid or sensitive review action.")
             _text(action["reason"], 2048)
             tool, args = action["tool"], action["arguments"]
+            if tool in {"list_files", "read_file", "search", "finish"}:
+                provenance[-1]["tool"] = tool
+            if finish_only and tool != "finish":
+                return done("partial", "Agent review did not finalize within its reserved budget; no further source tools were run.")
             if tool == "finish":
                 _keys(args, {"summary", "findings"})
                 _text(args["summary"], 2000)
                 if not reads:
+                    if not empty_finish_corrected and steps < MAX_DECISIONS and time.monotonic() + 1 < deadline:
+                        empty_finish_corrected = True
+                        messages.extend([{"role": "assistant", "content": raw}, {"role": "user", "content": _json({
+                            "tool": "finish", "error": "Review cannot finish before reading at least one available file with read_file.",
+                            "notice": "Read relevant source, or README/documentation for a documentation-only repository, then finish from that evidence.",
+                            "remainingDecisions": MAX_DECISIONS - steps})}])
+                        continue
                     raise ValueError("Review finished without reading source.")
                 findings = _accept_findings(args["findings"], files, reads, repository, commit)
                 # Do not promote arbitrary model prose to an authoritative result.
@@ -181,8 +230,10 @@ def review_repository(files, repository, commit, *, deadline, emit=None, model=N
                 _keys(args, {"path"}, {"start_line", "end_line"})
                 path = _text(args["path"], 1000)
                 start, end = args.get("start_line", 1), args.get("end_line", args.get("start_line", 1) + MAX_READ_LINES - 1)
-                if type(start) is not int or type(end) is not int or start < 1 or end < start or end - start >= MAX_READ_LINES:
+                if type(start) is not int or type(end) is not int or start < 1 or end < start:
                     raise ValueError("Invalid source line range.")
+                requested_end = end
+                end = min(end, start + MAX_READ_LINES - 1)
                 if path not in files:
                     result = {"error": "File is not available in this bounded snapshot."}
                 else:
@@ -194,8 +245,10 @@ def review_repository(files, repository, commit, *, deadline, emit=None, model=N
                             break
                         selected.append({"line": number, "text": text})
                         reads.setdefault(path, set()).add(number)
+                    last_line = selected[-1]["line"] if selected else start - 1
                     result = {"path": path, "lines": selected, "totalLines": len(lines),
-                              "truncated": bool(selected and selected[-1]["line"] < min(end, len(lines))) or (start <= len(lines) and not selected)}
+                              "truncated": last_line < min(requested_end, len(lines)),
+                              "nextStartLine": last_line + 1 if last_line < len(lines) else None}
             elif tool == "search":
                 _keys(args, {"query"})
                 query = _text(args["query"], 200)
@@ -216,6 +269,6 @@ def review_repository(files, repository, commit, *, deadline, emit=None, model=N
                 "remainingSeconds": max(0, round(deadline - time.monotonic(), 1))})}])
         return done("partial", "Agent review reached its decision limit before completion.")
     except _ModelFailure as error:
-        return done("unavailable", error.safe_message)
+        return done("partial" if error.status in {"timed_out", "budget_exhausted"} else "unavailable", error.safe_message)
     except (ValueError, TypeError, KeyError, UnicodeError, RecursionError):
         return done("failed", "Agent review returned unsupported or ungrounded evidence; no model findings were accepted.")

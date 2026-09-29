@@ -2,7 +2,7 @@
 
 const $ = (id) => document.getElementById(id);
 let state = { cases: [], history: [], activeRun: null, repositoryScans: [], activeScan: null, demoReady: [] };
-let selectedId = 'gpu-energy-pandas';
+let selectedId = '';
 try { selectedId = localStorage.getItem('secondlook-selection') || selectedId; } catch { /* Storage is optional. */ }
 let lastCaseSignature = '';
 let lastScanSignature = '';
@@ -174,6 +174,9 @@ function renderProjects() {
   if (signature !== lastProjectSignature) {
     lastProjectSignature = signature;
     $('project-select').replaceChildren();
+    const placeholder = node('option', '', 'Choose a saved result…');
+    placeholder.value = '';
+    $('project-select').append(placeholder);
     const prepared = node('optgroup');
     prepared.label = 'Prepared comparisons';
     for (const item of state.cases) {
@@ -262,7 +265,7 @@ function renderNavigation() {
     if (active) $(id).setAttribute('aria-current', 'page');
     else $(id).removeAttribute('aria-current');
   }
-  document.title = demo ? `${detail ? entry.title + ' · ' : ''}Saved examples — Hackday Idea` : 'Hackday Idea — dependency checks';
+  document.title = demo ? `${detail ? entry.title + ' · ' : ''}Saved examples — Hackday Idea` : 'Hackday Idea — repository checks';
 }
 
 function selectResult(id) {
@@ -413,7 +416,7 @@ function renderRepository() {
     const table = node('table', 'dependency-table');
     const head = node('thead');
     const row = node('tr');
-    for (const title of ['Dependency', 'Declared version', 'Ecosystem']) {
+    for (const title of ['Dependency', 'Declared / locked version', 'Ecosystem']) {
       const cell = node('th', '', title);
       cell.scope = 'col';
       row.append(cell);
@@ -553,7 +556,7 @@ function renderCase() {
   if (signature === lastCaseSignature) return;
   lastCaseSignature = signature;
   const confirmed = item.status === 'confirmed_break';
-  $('case-kind').textContent = item.kind === 'fixture' ? 'Demo fixture' : 'Repository check';
+  $('case-kind').textContent = item.kind === 'fixture' ? 'Demo fixture' : 'Prepared comparison';
   $('case-title').textContent = item.status === 'inconclusive' ? 'Comparison incomplete' : item.title;
   $('case-summary').textContent = item.summary;
   $('result-badge').textContent = confirmed ? 'Break confirmed' : item.status === 'inconclusive' ? 'Inconclusive' : 'Not run yet';
@@ -664,7 +667,7 @@ function renderHistory() {
 
 function updateRunPanel() {
   const item = selectedCase();
-  $('run-button').hidden = Boolean(selectedScan());
+  $('run-button').hidden = !item;
   if (!item) {
     $('run-button').disabled = true;
     $('run-panel').hidden = true;
@@ -731,7 +734,7 @@ async function refresh() {
       const id = demo.caseId || scanId(demo.scan);
       if (selectedId !== id) selectResult(id);
     }
-    if (!selectedCase() && !selectedScan()) selectedId = state.cases[0]?.id || (state.repositoryScans[0] ? scanId(state.repositoryScans[0]) : '');
+    if (!selectedCase() && !selectedScan()) selectedId = '';
     for (const run of state.history) {
       if (initialized && seenRuns.get(run.id) === 'running' && run.status !== 'running') {
         toast(run.status === 'completed'

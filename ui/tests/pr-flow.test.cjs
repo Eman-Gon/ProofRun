@@ -8,7 +8,7 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../app.js'), 'utf8')
   .split("$('project-select').addEventListener('change'")[0];
 
-function harness(respond) {
+function harness(respond, savedSelection = '') {
   const elements = new Map();
   const requests = [];
   const element = (id) => {
@@ -20,13 +20,15 @@ function harness(respond) {
   };
   const context = vm.createContext({
     document: { getElementById: element }, TextEncoder, AbortController, URL,
+    localStorage: { getItem: () => savedSelection },
     setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1, clearInterval() {},
     fetch: async (url, options) => {
-      requests.push({ url, payload: JSON.parse(options.body) });
+      requests.push({ url, payload: options.body ? JSON.parse(options.body) : null });
       return respond();
     },
   });
   vm.runInContext(source, context);
+  const initialSelection = vm.runInContext('selectedId', context);
   vm.runInContext(`
     connected = true;
     renderCase = () => {};
@@ -40,8 +42,27 @@ function harness(respond) {
     }}];
     selectedId = 'scan:review-1';
   `, context);
-  return { context, requests, element, run: (code) => vm.runInContext(code, context) };
+  return { context, requests, element, initialSelection, run: (code) => vm.runInContext(code, context) };
 }
+
+test('fresh and stale selections never default to a prepared demo; valid saved selections persist', async () => {
+  for (const stored of ['', 'prepared-case', 'scan:real-scan', 'deleted-result']) {
+    const h = harness(() => ({ ok: true, json: async () => ({
+      cases: [{ id: 'prepared-case' }], history: [], repositoryScans: [{ id: 'real-scan' }], demoReady: [],
+    }) }), stored);
+    h.context.saved = h.initialSelection;
+    h.run(`
+      selectedId = saved;
+      repositoriesRequested = true;
+      demoEntry = () => null;
+      for (const name of ['renderProjects', 'renderDemoReady', 'renderBand', 'updateRunPanel',
+        'updateRepositoryControls', 'renderHistory', 'renderNavigation']) this[name] = () => {};
+    `);
+    await h.run('refresh()');
+    assert.equal(h.run('connected'), true);
+    assert.equal(h.run('selectedId'), ['prepared-case', 'scan:real-scan'].includes(stored) ? stored : '');
+  }
+});
 
 test('a generic finding opens a truthful preview without publishing', () => {
   const h = harness(() => { throw new Error('Unexpected publication'); });

@@ -1053,3 +1053,27 @@ No new paid model runs were used for these graph checks. Configuration, route
 behavior and targeted verification commands are documented in
 [`docs/NEO4J.md`](docs/NEO4J.md#graphs-on-every-fix). Preserve the existing
 credentials, source registries and evidence directories during deployment.
+
+## Public repository review update — September 29, 2026
+
+The dashboard's public scan now invokes `src/repository_review.py`: a bounded
+OpenRouter agent chooses source reads and searches across languages. The
+existing release HTTP runner and fixture verifier remain separate workflows.
+Review has at most 12 decisions and 65 seconds, requires actual source reads,
+and labels incomplete/unavailable results explicitly. Findings carry
+`origin=agent`, `status=static_unverified`, `sourceSha256`, exact source spans,
+and a suggested reproduction; `result.review` records status, files read and
+model provenance. No public repository code or tests execute during review.
+
+Dependency discovery now includes supported Python/npm, Cargo, Go and Composer
+manifests and lockfiles. Generic exact patches can open regular PRs through the
+fixed preview overlay, with source/revision rechecks and explicit unverified
+scope. Saved examples remain available without being the initial selection.
+Run/scan report overlays expose saved evidence and runner output.
+
+Final focused verification: 182 Python tests and 5 UI tests passed. Live model
+review independently found a synthetic dependency-free boundary bug whose
+exact patch passed three controls. Five public repositories returned real
+source/dependency data; some reviews completed while others hit model limits.
+See [the validation report](reports/public-repository-validation-2026-09-29.md)
+for the measured outcomes and remaining completion/coverage limitations.
