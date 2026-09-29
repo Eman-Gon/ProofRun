@@ -1,5 +1,25 @@
 # BAND proposer and verifier handoff
 
+## Main dashboard
+
+The dashboard at `http://localhost:8765` includes a BAND repair-handoff panel
+above the saved comparisons. It reads the latest recorded BAND observation from
+`PROOFRUN_ARTIFACT_DIR` (default `.commit-watch/proofrun`). An optional
+`PROOFRUN_BAND_HISTORY_DIR` adds one existing worker evidence directory, such as
+a separately executed integration check. Settings come from the main `.env`,
+with process environment taking precedence. No keys or private artifact paths
+are returned to the browser.
+
+The panel displays the observation timestamp, transport mode, status, delivery
+stages and expandable receipt. It refreshes through normal dashboard polling.
+These are recorded observations of the registered generated-repair fixture;
+they do not represent the currently selected prepared comparison or public
+repository scan, and displaying them does not start a repair. Empty history
+and unavailable handoffs are shown explicitly. DuploCloud is not required to
+view this panel.
+
+## Live validation
+
 The optional BAND path is off by default in example configuration. On September
 29, 2026, a fresh OpenRouter-generated repair completed a live BAND round trip,
 passed all 14 native Docker repair checks, and produced 11 hash-checked artifacts.
