@@ -1,0 +1,9 @@
+# Python 3.12. Verified against the linked upstream APIs in README.md.
+cognee==1.6.0
+strands-agents[litellm]==1.56.0
+litellm==1.96.0
+pydantic==2.13.5
+python-dotenv==1.2.3
+requests==2.34.2
+packaging==26.3
+mcp==2.1.1

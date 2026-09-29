@@ -1,0 +1,714 @@
+{
+  "repository": "Eman-Gon/Gauntlet",
+  "repoUrl": "https://github.com/Eman-Gon/Gauntlet",
+  "commit": "a31d316f9b60241e56420156bbfa3e4979ff541c",
+  "checkedAt": "2026-09-22T02:56:41.147495+00:00",
+  "dependencies": [
+    {
+      "name": "anthropic",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "fastapi",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "httpx",
+      "version": "* || >=0.27",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "openai",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "orjson",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "pydantic",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "pydantic-settings",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "pytest",
+      "version": ">=8.0",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "sse-starlette",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "tavily-python",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "tenacity",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "trafilatura",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "uvicorn",
+      "version": "[standard]*",
+      "ecosystem": "pypi",
+      "file": "backend/pyproject.toml"
+    },
+    {
+      "name": "annotated-doc",
+      "version": "==0.0.4",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "annotated-types",
+      "version": "==0.7.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "anthropic",
+      "version": "==0.109.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "anyio",
+      "version": "==4.13.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "babel",
+      "version": "==2.18.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "certifi",
+      "version": "==2026.5.20",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "==3.4.7",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "click",
+      "version": "==8.4.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "colorama",
+      "version": "==0.4.6; sys_platform == \"win32\"",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "courlan",
+      "version": "==1.4.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "dateparser",
+      "version": "==1.4.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "distro",
+      "version": "==1.9.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "docstring-parser",
+      "version": "==0.18.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "fastapi",
+      "version": "==0.136.3",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "h11",
+      "version": "==0.16.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "htmldate",
+      "version": "==1.10.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "httpcore",
+      "version": "==1.0.9",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "httptools",
+      "version": "==0.8.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "httpx",
+      "version": "==0.28.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "idna",
+      "version": "==3.18",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "jiter",
+      "version": "==0.15.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "json-schema-to-pydantic",
+      "version": "==0.4.11",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "justext",
+      "version": "==3.0.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "lxml",
+      "version": "==6.1.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "lxml-html-clean",
+      "version": "==0.4.5",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "openai",
+      "version": "==2.41.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "orjson",
+      "version": "==3.11.9",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "pydantic",
+      "version": "==2.13.4",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "pydantic-core",
+      "version": "==2.46.4",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "pydantic-settings",
+      "version": "==2.14.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "==2.9.0.post0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "==1.2.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "pytz",
+      "version": "==2026.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "pyyaml",
+      "version": "==6.0.3",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "regex",
+      "version": "==2026.5.9",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "requests",
+      "version": "==2.34.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "six",
+      "version": "==1.17.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "sniffio",
+      "version": "==1.3.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "sse-starlette",
+      "version": "==3.4.4",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "starlette",
+      "version": "==1.2.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tavily-python",
+      "version": "==0.7.25",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tenacity",
+      "version": "==9.1.4",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tiktoken",
+      "version": "==0.13.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tld",
+      "version": "==0.13.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tqdm",
+      "version": "==4.68.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "trafilatura",
+      "version": "==2.1.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "typing-extensions",
+      "version": "==4.15.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "==0.4.2",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tzdata",
+      "version": "==2026.2; sys_platform == \"win32\"",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "tzlocal",
+      "version": "==5.3.1",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "urllib3",
+      "version": "==2.7.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "uvicorn",
+      "version": "==0.49.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "uvloop",
+      "version": "==0.22.1; platform_python_implementation != \"PyPy\" and sys_platform != \"cygwin\" and sys_platform != \"win32\"",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "watchfiles",
+      "version": "==1.2.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "websocket-client",
+      "version": "==1.9.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "websockets",
+      "version": "==16.0",
+      "ecosystem": "pypi",
+      "file": "backend/requirements.txt"
+    },
+    {
+      "name": "@types/node",
+      "version": "26.0.1",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    },
+    {
+      "name": "@types/react",
+      "version": "^18.3.3",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "^18.3.0",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    },
+    {
+      "name": "next",
+      "version": "^14.2.30",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    },
+    {
+      "name": "react",
+      "version": "^18.3.1",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    },
+    {
+      "name": "react-dom",
+      "version": "^18.3.1",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    },
+    {
+      "name": "typescript",
+      "version": "^5.5.3",
+      "ecosystem": "npm",
+      "file": "frontend/package.json"
+    }
+  ],
+  "findings": [],
+  "filesScanned": 55,
+  "warnings": [
+    "Lockfiles are not parsed by this inspector; dependency versions are manifest declarations only."
+  ],
+  "scope": "Static source inspection with Secondlook's unchanged archive reader and three migration rules. Live GitHub CLI metadata was used after the dashboard's unauthenticated metadata request was refused. The public pinned archive was downloaded without credentials. Same file/archive limits apply. No repository code, tests, installations, or AI services were run.",
+  "provenance": {
+    "metadata": "live GitHub CLI API",
+    "archive": "unauthenticated public codeload snapshot",
+    "archiveBytes": 238949,
+    "archiveSha256": "5bbf5c1af4dd8f16e7228502e21df3d399b81b6fed1f8f9e2b5f9726e084d2c0",
+    "scannerSha256": "14ac9f892746d03207fa7ddfc126ee277c51f9a810b58c0c3c7c9453ac29dfe8",
+    "sourceArtifact": ".commit-watch/gauntlet-test-20260922T025545Z/cli-metadata-scan.json",
+    "note": "Reused the completed CLI-metadata static scan after the dashboard request was refused. checkedAt and commit retain their original values. No runtime validation is implied."
+  },
+  "scannedFiles": [
+    {
+      "path": "backend/app/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/buyer.py",
+      "sha256": "13488985aafc784518d3f2045655f0565c8e154f01df1c5a677560dad13ef0b0"
+    },
+    {
+      "path": "backend/app/buyer_events.py",
+      "sha256": "933998bf596cc78a72b144028a2667131ab4a40adb79666b10e939ea29aa0d20"
+    },
+    {
+      "path": "backend/app/cache.py",
+      "sha256": "18554f8f71d39fa399e4656925b42e17604ae8960b26d75aa4d14d2ea1e9156b"
+    },
+    {
+      "path": "backend/app/claim_audit.py",
+      "sha256": "412b282615b775e71dcb704c40049dbc714077e6b4a40e2b9e533fa9e4bc4907"
+    },
+    {
+      "path": "backend/app/clients.py",
+      "sha256": "8419e3a84daed385f4a5f97672b458cac9c2a141bac1f69a53a8852ec302f3f4"
+    },
+    {
+      "path": "backend/app/config.py",
+      "sha256": "4790b37771400a739b8815cf75f0b7806edccfaf65afac7ec93627ff8f20d843"
+    },
+    {
+      "path": "backend/app/exa_client.py",
+      "sha256": "420f4c97327b50fa1f1c2ec0a669fe0a7aca3fd4a27c305f19300b4ebcd5e7a6"
+    },
+    {
+      "path": "backend/app/gauntlet.py",
+      "sha256": "9ea9e8ceb81a746b11a8a70d3e6f9fd2215dd5bbfb5201bfe09bce709833d3e0"
+    },
+    {
+      "path": "backend/app/gauntlet_watch.py",
+      "sha256": "a6c46a2661e277332fa9d2181bcfe1679fb95491712c84497f6a6f674aa726c3"
+    },
+    {
+      "path": "backend/app/pipeline/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/pipeline/advise.py",
+      "sha256": "894818b605af3bb0c3d0292af5ec8d10ed26e861bc56b39847189c26bfb4e06b"
+    },
+    {
+      "path": "backend/app/pipeline/extract.py",
+      "sha256": "252f577122f61b3d2e562550617c7f4279dde0f1cd65de315455b5894b386ad1"
+    },
+    {
+      "path": "backend/app/pipeline/honest_ad.py",
+      "sha256": "fcf74f94d91fab64d8b2135e9b2ffbc94847cb9efaee0303ba43528386366b25"
+    },
+    {
+      "path": "backend/app/pipeline/hunt.py",
+      "sha256": "fb5a7e16eccb8d45fd50e18be70de645c43e8f0de460a766376a881806a22d28"
+    },
+    {
+      "path": "backend/app/pipeline/ingest.py",
+      "sha256": "6866df954bc93b3d7b59a6b38dde6005ec536c92a0392ceee82b93c0bbde0bda"
+    },
+    {
+      "path": "backend/app/pipeline/judge.py",
+      "sha256": "d58c9b3524dd68027275bf03a9b182eb9cceb71e16e2c8b73c2e1ee65d563cd0"
+    },
+    {
+      "path": "backend/app/pipeline/orchestrator.py",
+      "sha256": "0c192ca1b25f0dcd7688f84ef1357e1be677a93bc000a7c710aaf6817f71c054"
+    },
+    {
+      "path": "backend/app/pipeline/red_flag.py",
+      "sha256": "4c245428ef02f4e27b070ea565207300ad7d2b38609f8fc9c21dda7a00f10fd9"
+    },
+    {
+      "path": "backend/app/probes/__init__.py",
+      "sha256": "ba9ca3052cdb4f74a9daac1bf4623b6c8fc7186aa50b42d0a6f0dfd64dce9209"
+    },
+    {
+      "path": "backend/app/product_extraction.py",
+      "sha256": "a841811464655a627b92cc765daefc666b6c6b5396e77974c866889c9fd72ae7"
+    },
+    {
+      "path": "backend/app/reputation.py",
+      "sha256": "e1706d6f0bfe59b72e7e63d22a157f280954dcf7db3684858054d3c56b2be5f6"
+    },
+    {
+      "path": "backend/app/schemas.py",
+      "sha256": "13f985728e8330d2be9834921460d537d11a9635e901da23a735b0afe0544bfe"
+    },
+    {
+      "path": "backend/app/scoring.py",
+      "sha256": "cd47aa8edc80417b967dd859cc059bac60cee507c8d48475c6331363aa32b068"
+    },
+    {
+      "path": "backend/app/server.py",
+      "sha256": "c0d1be73b91be5bcf0fbb56ca2cb5efc537b5a48b9ddcab583b31d4fb9d37a3d"
+    },
+    {
+      "path": "backend/app/shopping_agent.py",
+      "sha256": "383f4d97bb5c333af7e4a002b066e3450c7b15e7a0dfd43962599343618e922a"
+    },
+    {
+      "path": "backend/app/target_client.py",
+      "sha256": "43e9a97547efb0cf7535498ebc33e6b5b1ffc122687915c2fcbf0e1b117eeea3"
+    },
+    {
+      "path": "backend/app/telemetry.py",
+      "sha256": "a9cebe17f43c570d1b8bdc92babf9a49b6e26c8ba622e80b3ea6e2bc45f98084"
+    },
+    {
+      "path": "backend/app/test_vendor.py",
+      "sha256": "398371a71c48b6c9c11c742eaf40ad4a8545ee8847051c194ce6703d538e04ca"
+    },
+    {
+      "path": "backend/app/x402.py",
+      "sha256": "377c6b7d234cdd268c66448463af2eaab25956b11fb373070d5880f529373488"
+    },
+    {
+      "path": "backend/pyproject.toml",
+      "sha256": "a30e5b37739229092e8fda435d2130b5aabd40e98909f42621544c488cbda976"
+    },
+    {
+      "path": "backend/requirements.txt",
+      "sha256": "d7b894bcb58132ad41743dbace07f1e8ebd860325724e77286da5ce03c8caa8b"
+    },
+    {
+      "path": "backend/tests/conftest.py",
+      "sha256": "335bb621941a9e457d36b93aac53f178cf88994fd234e7a852f9c0cd6673e968"
+    },
+    {
+      "path": "backend/tests/test_buyer.py",
+      "sha256": "56c414c50a3c172f363185f04095abd94697564e2343b43a832ee8564d3820d5"
+    },
+    {
+      "path": "backend/tests/test_claim_audit.py",
+      "sha256": "9c714d1790509aae514f003f299602a62879e6a31ecb4e247395f7c44337d1fa"
+    },
+    {
+      "path": "backend/tests/test_exa.py",
+      "sha256": "c95db21a8231fc225b3112db659335213a2a48f2aa3c858fa1bcc2c3df689b76"
+    },
+    {
+      "path": "backend/tests/test_product_extraction.py",
+      "sha256": "99f822fff2ac2726ce12b2a6a51bfe66b9dbbbb682c9ad11517a976d64445fa8"
+    },
+    {
+      "path": "backend/tests/test_purchase.py",
+      "sha256": "755a04d78d495ab796655be073589fc98b81b70c84e406ff91a30b05157ad2ae"
+    },
+    {
+      "path": "backend/tests/test_shopping_agent.py",
+      "sha256": "55b772a6016bac579eaf4dd8a7df0e8a21020d49055e7387d07aeb1059d9c26a"
+    },
+    {
+      "path": "buyer-agent/buyer_agent.py",
+      "sha256": "d3d65ee70818607a4d5a42e0a66eb247af34f0615861e19689f1e8539546ee61"
+    },
+    {
+      "path": "buyer-agent/stripe_client.py",
+      "sha256": "7526541ec5fa09e7b97aa3794e16f638757e0922b020f828f14bbafb22668b19"
+    },
+    {
+      "path": "frontend/next-env.d.ts",
+      "sha256": "9dd9d642cdb87d4d5b3173217e0c45429b3e47a6f5cf5fb0ead6c644ec5fed01"
+    },
+    {
+      "path": "frontend/next.config.mjs",
+      "sha256": "fba76aa45711920ad959817c47d93e29acc9c81e4376fc001e6f23f893c94a75"
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "8651bb1b8f7d92ca2208dc8203f13c57bb473b6afb5f3c55b1288d743c867a06"
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "sha256": "01b9b8ad120ed4980048c4aa1e5884717f15c88e8c6aad7f4a4afc38de33cfe8"
+    },
+    {
+      "path": "frontend/src/app/layout.tsx",
+      "sha256": "99713350ad6c5124a35522c63ec2402d928deaa9373f652b743a51bcec023f26"
+    },
+    {
+      "path": "frontend/src/app/page.tsx",
+      "sha256": "4eea108bed551f9572150b937dc5da2370b2e7f9a701967ed77b2c13f5fec7d6"
+    },
+    {
+      "path": "frontend/src/components/ActivityFeed.tsx",
+      "sha256": "ecd3f83588155bce707016839cc1de150bb22b6a4031a6e97c20f4048bae1358"
+    },
+    {
+      "path": "frontend/src/components/GauntletLogo.tsx",
+      "sha256": "30ec7acf0b61c685c3e1c00b8165171841b78d982bcaa9d3d60fb02a10697148"
+    },
+    {
+      "path": "frontend/src/components/GlassCard.tsx",
+      "sha256": "58f15a0af725eb31e85069afd1d423332a95b548b8428885df455036bee8f7fe"
+    },
+    {
+      "path": "frontend/src/components/ShopperPanel.tsx",
+      "sha256": "aed9ef33c1d9c2cbfc4611cf755dd22c7a192e868153d87c17bac538185f48da"
+    },
+    {
+      "path": "frontend/src/components/StatusStrip.tsx",
+      "sha256": "f3639ea11d184f8d585c2016a652af0b8753413b9b70c53fd35e95348868e321"
+    },
+    {
+      "path": "frontend/src/components/ui.tsx",
+      "sha256": "190e63bf1a93c2f258c9c912adb8d0b2a13afc87cfbd92de9767f5ccf72f9d5f"
+    },
+    {
+      "path": "frontend/src/lib/api.ts",
+      "sha256": "3c46cce2d2ee2e8998df4ea5af23dd0025b7ab1f03b41a4650d8ed971922648f"
+    },
+    {
+      "path": "target-agent/app.py",
+      "sha256": "6943b548280df9a12440906738373b1cbeaaa1783ee5c98e8f3cd4b12581e138"
+    }
+  ],
+  "explanation": {
+    "heading": "No matching migration patterns found",
+    "summary": "The scan read 55 source or manifest files. It found no matches for the limited rules, including those for pydantic. Other API changes and packages remain unchecked; this is not evidence that an upgrade is compatible. No code or tests were run.",
+    "checked": "The current checks look for pandas uppercase hourly frequencies, Pydantic nullable fields without defaults, and legacy web-vitals imports.",
+    "limits": "Review the scan warnings for coverage limits. Open version constraints describe allowed versions, not the versions actually installed. No repository code or tests were run.",
+    "nextStep": "Choose a proposed dependency version and test the affected code with both current and proposed versions."
+  }
+}

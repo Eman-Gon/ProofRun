@@ -1,0 +1,238 @@
+{
+  "repository": "pallets/flask",
+  "repoUrl": "https://github.com/pallets/flask",
+  "commit": "d73fa1cdcbd8b1465c151db8924ba58b1dd14e35",
+  "checkedAt": "2026-09-22T02:13:29.984715+00:00",
+  "dependencies": [
+    {
+      "name": "celery",
+      "version": "[redis]*",
+      "ecosystem": "pypi",
+      "file": "examples/celery/pyproject.toml"
+    },
+    {
+      "name": "flask",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "examples/celery/pyproject.toml"
+    },
+    {
+      "name": "amqp",
+      "version": "==5.1.1",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "async-timeout",
+      "version": "==4.0.2",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "billiard",
+      "version": "==3.6.4.0",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "blinker",
+      "version": "==1.6.2",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "celery",
+      "version": "[redis]==5.2.7",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "click",
+      "version": "==8.1.3",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "click-didyoumean",
+      "version": "==0.3.0",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "click-plugins",
+      "version": "==1.1.1",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "click-repl",
+      "version": "==0.2.0",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "flask",
+      "version": "==2.3.2",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "itsdangerous",
+      "version": "==2.1.2",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "jinja2",
+      "version": "==3.1.2",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "kombu",
+      "version": "==5.2.4",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "markupsafe",
+      "version": "==2.1.2",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "prompt-toolkit",
+      "version": "==3.0.38",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "pytz",
+      "version": "==2023.3",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "redis",
+      "version": "==4.5.4",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "six",
+      "version": "==1.16.0",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "vine",
+      "version": "==5.0.0",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "wcwidth",
+      "version": "==0.2.6",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "werkzeug",
+      "version": "==2.3.3",
+      "ecosystem": "pypi",
+      "file": "examples/celery/requirements.txt"
+    },
+    {
+      "name": "flask",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "examples/javascript/pyproject.toml"
+    },
+    {
+      "name": "pytest",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "examples/javascript/pyproject.toml"
+    },
+    {
+      "name": "flask",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "examples/tutorial/pyproject.toml"
+    },
+    {
+      "name": "pytest",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "examples/tutorial/pyproject.toml"
+    },
+    {
+      "name": "asgiref",
+      "version": ">=3.2",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "blinker",
+      "version": ">=1.9.0",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "click",
+      "version": ">=8.1.3",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "itsdangerous",
+      "version": ">=2.2.0",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "jinja2",
+      "version": ">=3.1.2",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "markupsafe",
+      "version": ">=2.1.1",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "*",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    },
+    {
+      "name": "werkzeug",
+      "version": ">=3.1.0",
+      "ecosystem": "pypi",
+      "file": "pyproject.toml"
+    }
+  ],
+  "findings": [],
+  "filesScanned": 88,
+  "scope": "Static, unverified inspection of one public default-branch commit. No repository code, tests, installs, or AI services were run. Checks cover imported pandas date_range/timedelta_range freq='H', directly imported Pydantic BaseModel nullable fields without defaults, and explicit legacy web-vitals imports/destructuring. Dependency declarations come only from package.json, requirements text files, and supported PEP 621 pyproject.toml fields; lockfiles, setup.py, notebooks, dynamic imports, indirect inheritance, and general API compatibility are not analyzed. Local/git/URL dependencies are omitted. At most 300 UTF-8 files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. No findings does not establish upgrade compatibility. Proposed changes are suggestions only and are not applied.",
+  "warnings": [
+    "Lockfiles are not parsed by this inspector; dependency versions are manifest declarations only."
+  ],
+  "provenance": {
+    "metadata": "unauthenticated public GitHub API (saved dashboard result)",
+    "archive": "unauthenticated public codeload snapshot (saved dashboard result)",
+    "sourceArtifact": ".commit-watch/dashboard-before-picker.json",
+    "sourceScanId": "282ff4456cc74afca9bd267054da2a08",
+    "note": "Reused a completed static scan; checkedAt and commit retain their original values. No new scan or runtime validation is implied."
+  },
+  "explanation": {
+    "heading": "These dependencies need broader checks",
+    "summary": "The scan read 88 source or manifest files. It identified declarations for celery, flask, amqp, and async-timeout and other packages, but the current migration checks do not cover these packages. No matching issues were found; upgrade compatibility is still unknown. No code or tests were run.",
+    "checked": "The current checks look for pandas uppercase hourly frequencies, Pydantic nullable fields without defaults, and legacy web-vitals imports.",
+    "limits": "Review the scan warnings for coverage limits. Open version constraints describe allowed versions, not the versions actually installed. No repository code or tests were run.",
+    "nextStep": "Choose a proposed dependency version and test the affected code with both current and proposed versions."
+  }
+}

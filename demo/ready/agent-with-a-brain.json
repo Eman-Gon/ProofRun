@@ -1,0 +1,44 @@
+{
+  "repository": "sandhya-subramani/Agent-with-a-Brain",
+  "repoUrl": "https://github.com/sandhya-subramani/Agent-with-a-Brain",
+  "commit": "602e537013e947713c3700bce8376066e0a9e3b9",
+  "checkedAt": "2026-09-22T02:36:45.265654+00:00",
+  "dependencies": [
+    {
+      "name": "cognee",
+      "version": "[aws]>=1.6.0",
+      "ecosystem": "pypi",
+      "file": "requirements.txt"
+    },
+    {
+      "name": "python-dotenv",
+      "version": ">=1.0",
+      "ecosystem": "pypi",
+      "file": "requirements.txt"
+    },
+    {
+      "name": "strands-agents",
+      "version": ">=1.56.0",
+      "ecosystem": "pypi",
+      "file": "requirements.txt"
+    }
+  ],
+  "findings": [],
+  "filesScanned": 4,
+  "scope": "Static, unverified inspection of one public default-branch commit. No repository code, tests, installs, or AI services were run. Checks cover imported pandas date_range/timedelta_range freq='H', directly imported Pydantic BaseModel nullable fields without defaults, and explicit legacy web-vitals imports/destructuring. Dependency declarations come only from package.json, requirements text files, and supported PEP 621 pyproject.toml fields; lockfiles, setup.py, notebooks, dynamic imports, indirect inheritance, and general API compatibility are not analyzed. Local/git/URL dependencies are omitted. At most 300 UTF-8 files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. No findings does not establish upgrade compatibility. Proposed changes are suggestions only and are not applied.",
+  "warnings": [],
+  "explanation": {
+    "heading": "These dependencies need broader checks",
+    "summary": "The scan read 4 source or manifest files. It identified declarations for cognee, python-dotenv, and strands-agents, but the current migration checks do not cover these packages. No matching issues were found; upgrade compatibility is still unknown. No code or tests were run.",
+    "checked": "The current checks look for pandas uppercase hourly frequencies, Pydantic nullable fields without defaults, and legacy web-vitals imports.",
+    "limits": "Open version constraints describe allowed versions, not the versions actually installed. No repository code or tests were run.",
+    "nextStep": "For this dependency set, exercise agent startup and memory write/recall with the current and proposed versions. These are suggested tests; the scan did not inspect those behaviors."
+  },
+  "provenance": {
+    "metadata": "unauthenticated public GitHub API (saved dashboard result)",
+    "archive": "unauthenticated public codeload snapshot (saved dashboard result)",
+    "sourceArtifact": ".commit-watch/dashboard-before-cloud.json",
+    "sourceScanId": "4ec2db51e1034431b9844e38e7d4e43d",
+    "note": "Reused a completed static scan; checkedAt and commit retain their original values. No new scan or runtime validation is implied."
+  }
+}

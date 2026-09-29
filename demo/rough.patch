@@ -1,0 +1,72 @@
+diff --git a/src/fp_multimodel/models.py b/src/fp_multimodel/models.py
+--- a/src/fp_multimodel/models.py
++++ b/src/fp_multimodel/models.py
+@@ -229,7 +229,7 @@
+ 
+     @model_validator(mode="after")
+     def validate_time_range(self) -> "Utterance":
+-        if self.end_ms <= self.start_ms:
++        if self.end_ms < self.start_ms:
+             raise ValueError("end_ms must be greater than start_ms")
+         if len(self.source_segment_ids) != len(set(self.source_segment_ids)):
+             raise ValueError("source_segment_ids must be unique")
+diff --git a/scratch/demo-notes.txt b/scratch/demo-notes.txt
+new file mode 100644
+--- /dev/null
++++ b/scratch/demo-notes.txt
+@@ -0,0 +1,55 @@
++Deliberately unrelated demo scratch notes.
++Scratch item 01: unfinished notes for the rough-commit demo.
++Scratch item 02: unfinished notes for the rough-commit demo.
++Scratch item 03: unfinished notes for the rough-commit demo.
++Scratch item 04: unfinished notes for the rough-commit demo.
++Scratch item 05: unfinished notes for the rough-commit demo.
++Scratch item 06: unfinished notes for the rough-commit demo.
++Scratch item 07: unfinished notes for the rough-commit demo.
++Scratch item 08: unfinished notes for the rough-commit demo.
++Scratch item 09: unfinished notes for the rough-commit demo.
++Scratch item 10: unfinished notes for the rough-commit demo.
++Scratch item 11: unfinished notes for the rough-commit demo.
++Scratch item 12: unfinished notes for the rough-commit demo.
++Scratch item 13: unfinished notes for the rough-commit demo.
++Scratch item 14: unfinished notes for the rough-commit demo.
++Scratch item 15: unfinished notes for the rough-commit demo.
++Scratch item 16: unfinished notes for the rough-commit demo.
++Scratch item 17: unfinished notes for the rough-commit demo.
++Scratch item 18: unfinished notes for the rough-commit demo.
++Scratch item 19: unfinished notes for the rough-commit demo.
++Scratch item 20: unfinished notes for the rough-commit demo.
++Scratch item 21: unfinished notes for the rough-commit demo.
++Scratch item 22: unfinished notes for the rough-commit demo.
++Scratch item 23: unfinished notes for the rough-commit demo.
++Scratch item 24: unfinished notes for the rough-commit demo.
++Scratch item 25: unfinished notes for the rough-commit demo.
++Scratch item 26: unfinished notes for the rough-commit demo.
++Scratch item 27: unfinished notes for the rough-commit demo.
++Scratch item 28: unfinished notes for the rough-commit demo.
++Scratch item 29: unfinished notes for the rough-commit demo.
++Scratch item 30: unfinished notes for the rough-commit demo.
++Scratch item 31: unfinished notes for the rough-commit demo.
++Scratch item 32: unfinished notes for the rough-commit demo.
++Scratch item 33: unfinished notes for the rough-commit demo.
++Scratch item 34: unfinished notes for the rough-commit demo.
++Scratch item 35: unfinished notes for the rough-commit demo.
++Scratch item 36: unfinished notes for the rough-commit demo.
++Scratch item 37: unfinished notes for the rough-commit demo.
++Scratch item 38: unfinished notes for the rough-commit demo.
++Scratch item 39: unfinished notes for the rough-commit demo.
++Scratch item 40: unfinished notes for the rough-commit demo.
++Scratch item 41: unfinished notes for the rough-commit demo.
++Scratch item 42: unfinished notes for the rough-commit demo.
++Scratch item 43: unfinished notes for the rough-commit demo.
++Scratch item 44: unfinished notes for the rough-commit demo.
++Scratch item 45: unfinished notes for the rough-commit demo.
++Scratch item 46: unfinished notes for the rough-commit demo.
++Scratch item 47: unfinished notes for the rough-commit demo.
++Scratch item 48: unfinished notes for the rough-commit demo.
++Scratch item 49: unfinished notes for the rough-commit demo.
++Scratch item 50: unfinished notes for the rough-commit demo.
++Scratch item 51: unfinished notes for the rough-commit demo.
++Scratch item 52: unfinished notes for the rough-commit demo.
++Scratch item 53: unfinished notes for the rough-commit demo.
++Scratch item 54: unfinished notes for the rough-commit demo.

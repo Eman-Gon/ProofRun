@@ -1,0 +1,51 @@
+{
+  "url": "http://127.0.0.1:8765/#demo-ready",
+  "entries": [
+    {
+      "repository": "Eman-Gon/gpu-energy-recommender",
+      "evidenceLabel": "Measured comparison",
+      "available": true
+    },
+    {
+      "repository": "Eman-Gon/scam_killer",
+      "evidenceLabel": "Static finding",
+      "available": true
+    },
+    {
+      "repository": "Eman-Gon/Gauntlet",
+      "evidenceLabel": "Saved source scan",
+      "available": true
+    },
+    {
+      "repository": "sandhya-subramani/Agent-with-a-Brain",
+      "evidenceLabel": "Saved source scan",
+      "available": true
+    },
+    {
+      "repository": "pallets/flask",
+      "evidenceLabel": "Saved source scan",
+      "available": true
+    }
+  ],
+  "preservedScans": 10,
+  "preservedRuns": 2,
+  "browserChecks": [
+    "All five demo links open correct evidence",
+    "Gauntlet deep link survives reload",
+    "Gallery and workspace navigation work",
+    "390px viewport has five cards and no horizontal overflow",
+    "No browser errors observed"
+  ],
+  "tests": [
+    {
+      "command": ".venv/bin/python -m pytest tests/test_demo_ready.py tests/test_dashboard.py -q",
+      "passed": 41
+    },
+    {
+      "command": ".venv/bin/python -m pytest tests/test_demo_ready.py tests/test_result_explanation.py tests/test_public_repo.py -q",
+      "passed": 52,
+      "subtestsPassed": 82
+    }
+  ],
+  "note": "Test commands overlap on the 12 demo-ready tests."
+}

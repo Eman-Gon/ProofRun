@@ -1,0 +1,203 @@
+{
+  "repository": "Eman-Gon/gpu-energy-recommender",
+  "repoUrl": "https://github.com/Eman-Gon/gpu-energy-recommender",
+  "commit": "7a802eace3a3775acc5ea4af6c266079e2599eb3",
+  "checkedAt": "2026-09-22T02:59:09.069620+00:00",
+  "filesScanned": 31,
+  "dependencies": [],
+  "findings": [
+    {
+      "id": "pandas-hour:eda/data_collection.py:22",
+      "status": "static_unverified",
+      "title": "Hourly frequency needs review before pandas 3",
+      "package": "pandas",
+      "file": "eda/data_collection.py",
+      "line": 22,
+      "beforeCode": "freq='H'",
+      "afterCode": "freq='h'",
+      "explanation": "Static, unverified: this imported pandas call uses the uppercase H hourly alias removed in pandas 3.0. Lowercase h is the migration candidate. Check the actual installed version and run this call before changing it.",
+      "sourceUrl": "https://pandas.pydata.org/docs/whatsnew/v3.0.0.html#enforced-deprecations"
+    },
+    {
+      "id": "pandas-hour:eda/data_collection.py:63",
+      "status": "static_unverified",
+      "title": "Hourly frequency needs review before pandas 3",
+      "package": "pandas",
+      "file": "eda/data_collection.py",
+      "line": 63,
+      "beforeCode": "freq='H'",
+      "afterCode": "freq='h'",
+      "explanation": "Static, unverified: this imported pandas call uses the uppercase H hourly alias removed in pandas 3.0. Lowercase h is the migration candidate. Check the actual installed version and run this call before changing it.",
+      "sourceUrl": "https://pandas.pydata.org/docs/whatsnew/v3.0.0.html#enforced-deprecations"
+    },
+    {
+      "id": "pandas-hour:edabad/data_collection.py:22",
+      "status": "static_unverified",
+      "title": "Hourly frequency needs review before pandas 3",
+      "package": "pandas",
+      "file": "edabad/data_collection.py",
+      "line": 22,
+      "beforeCode": "freq='H'",
+      "afterCode": "freq='h'",
+      "explanation": "Static, unverified: this imported pandas call uses the uppercase H hourly alias removed in pandas 3.0. Lowercase h is the migration candidate. Check the actual installed version and run this call before changing it.",
+      "sourceUrl": "https://pandas.pydata.org/docs/whatsnew/v3.0.0.html#enforced-deprecations"
+    },
+    {
+      "id": "pandas-hour:edabad/data_collection.py:63",
+      "status": "static_unverified",
+      "title": "Hourly frequency needs review before pandas 3",
+      "package": "pandas",
+      "file": "edabad/data_collection.py",
+      "line": 63,
+      "beforeCode": "freq='H'",
+      "afterCode": "freq='h'",
+      "explanation": "Static, unverified: this imported pandas call uses the uppercase H hourly alias removed in pandas 3.0. Lowercase h is the migration candidate. Check the actual installed version and run this call before changing it.",
+      "sourceUrl": "https://pandas.pydata.org/docs/whatsnew/v3.0.0.html#enforced-deprecations"
+    }
+  ],
+  "warnings": [
+    "No supported registry dependency declarations were found; installed versions are unknown."
+  ],
+  "scope": "Static, unverified inspection of one public default-branch commit. No repository code, tests, installs, or AI services were run. Checks cover imported pandas date_range/timedelta_range freq='H', directly imported Pydantic BaseModel nullable fields without defaults, and explicit legacy web-vitals imports/destructuring. Dependency declarations come only from package.json, requirements text files, and supported PEP 621 pyproject.toml fields; lockfiles, setup.py, notebooks, dynamic imports, indirect inheritance, and general API compatibility are not analyzed. Local/git/URL dependencies are omitted. At most 300 UTF-8 files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. No findings does not establish upgrade compatibility. Proposed changes are suggestions only and are not applied.",
+  "provenance": {
+    "metadata": "live GitHub CLI API",
+    "archive": "unauthenticated public codeload snapshot",
+    "archiveBytes": 15370699,
+    "archiveSha256": "d5b8cd86ff93b9ed3ae4b36243c1075327399c903419e53e1fcd2f047dfa35d8",
+    "scannerSha256": "14ac9f892746d03207fa7ddfc126ee277c51f9a810b58c0c3c7c9453ac29dfe8",
+    "note": "Public metadata resolved with GitHub CLI; pinned archive inspected with the unchanged public scanner limits and migration rules. No upstream code executed."
+  },
+  "scannedFiles": [
+    {
+      "path": "First_Draft_of_Final_project/models/critical_analysis.py",
+      "sha256": "9739bdee9e66eb1c99df91555aab553fd300724d6e6150de1b9f57c485f87a2b"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/evaluate_models.py",
+      "sha256": "0dd1c341f1208101aa6c2beed51bd47bbb504239d51382ad46d467c53cf94caa"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/proof_daytime_efficiency.py",
+      "sha256": "aba30fc5e62b269abf0013ae1c7bc07601f97bf723deae16162930098df570c2"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/simulation_visualizations.py",
+      "sha256": "ac52bc32766e5ac6c908186464c85e30f7aa13491dbb0760bedef09ff1eab165"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/simulations.py",
+      "sha256": "fdd77c2715b275df78f35963a46ae1868941b00bfff69560babe15bc78c05b67"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/spike_analysis.py",
+      "sha256": "bd4339d88ea527349abef7d4da933fd33257360661660977cf9c51a358c3616b"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/statistical_validation.py",
+      "sha256": "c7d6542326a7e76b10ecffb9bed31923ee97d9a1aac47545b48c4e395636133d"
+    },
+    {
+      "path": "First_Draft_of_Final_project/models/train_classifiers.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "First_Draft_of_Final_project/results/pkl.py",
+      "sha256": "7bddd51221a78e5cac5f7f109ef88b9c672643a6a0c74c5a0e2a3ec5d54d9e29"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/create_umap_labeled.py",
+      "sha256": "b54042f7dc492c346652b7097db4d9c48ea33d9b15d867905b8bd2e6ffdd31ba"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/create_umap_visual.py",
+      "sha256": "1638bbc72b2b13e156710e01548aad0e2baeccb7f45f308ad4cbda667cb45e21"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/critical_analysis.py",
+      "sha256": "9ef250fd291e82e47860ba7eb3cce89fe93397a50d8a4ca7a9e26b199855e96c"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/evaluate_models.py",
+      "sha256": "7c07db525f3a794b790accd4cbbe8b33d306bef7e26a17860cbcdfa80b504dd9"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/generate_all_visuals.py",
+      "sha256": "5739b6ceb12bc30b0ce06f5c511287407358c8dbda106bb11263066153aa8cf7"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/proof_daytime_efficiency.py",
+      "sha256": "aba30fc5e62b269abf0013ae1c7bc07601f97bf723deae16162930098df570c2"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/pythonchart.py",
+      "sha256": "cc315070f5a33b86990ba4d8b3e0c7025bbebe1684f1ed496661339b72646f9b"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/simulation_visualizations.py",
+      "sha256": "ac52bc32766e5ac6c908186464c85e30f7aa13491dbb0760bedef09ff1eab165"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/simulations.py",
+      "sha256": "fdd77c2715b275df78f35963a46ae1868941b00bfff69560babe15bc78c05b67"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/spike_analysis.py",
+      "sha256": "f0c2d2996693e31d728a5f1a28b4c7e7fdc18861b95c3eb69fb9033f8902c16b"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/statistical_validation.py",
+      "sha256": "7b792587d12227e3db66b4ce0ab6b2c1b4c69c61c3d547e6494507736fc8f36f"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/models/train_classifiers.py",
+      "sha256": "a3ef46e35e89c617739fe066b7af17c78b3d3f39ff3daa81ec7e3c5ff066fe32"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/results/examplepkl.py",
+      "sha256": "c3e03e1870b5f658c8d79d25e12e67170799b2028aba6e20db9e3e03fb0b6185"
+    },
+    {
+      "path": "First_Draft_of_Final_project_backup/results/pkl.py",
+      "sha256": "e91a9fbc42e0252099ceb221fac1c2c83cce74df89a67091a0acda0cf752bda2"
+    },
+    {
+      "path": "eda/Analyze_target_variable.py",
+      "sha256": "2f91427cddcf1dd46779a583a3a33870464d2d9b1a9d19cdb3068ef7504dd399"
+    },
+    {
+      "path": "eda/additional_visualizations.py",
+      "sha256": "762655d17cbccf21ae609cc5e9ce1dbef899ad66cc1812ab889a0e71fa0be874"
+    },
+    {
+      "path": "eda/data_collection.py",
+      "sha256": "acf7feda0e7f87216d7683084211ba7d990531dd0ffab393ac6c67bf3abc276e"
+    },
+    {
+      "path": "eda/eda.py",
+      "sha256": "e6ee83f31f8d06723ae86d462a8b4d5f32f9fdc7f2fd01b10846d65cdc41801f"
+    },
+    {
+      "path": "edabad/Analyze_target_variable.py",
+      "sha256": "2f91427cddcf1dd46779a583a3a33870464d2d9b1a9d19cdb3068ef7504dd399"
+    },
+    {
+      "path": "edabad/additional_visualizations.py",
+      "sha256": "762655d17cbccf21ae609cc5e9ce1dbef899ad66cc1812ab889a0e71fa0be874"
+    },
+    {
+      "path": "edabad/data_collection.py",
+      "sha256": "acf7feda0e7f87216d7683084211ba7d990531dd0ffab393ac6c67bf3abc276e"
+    },
+    {
+      "path": "edabad/eda.py",
+      "sha256": "e6ee83f31f8d06723ae86d462a8b4d5f32f9fdc7f2fd01b10846d65cdc41801f"
+    }
+  ],
+  "explanation": {
+    "heading": "4 potential upgrade issues to review",
+    "summary": "The scan read 31 source or manifest files. It reported 4 potential issues. Start with eda/data_collection.py:22 and eda/data_collection.py:63. These are static suggestions; no code or tests were run, so failures and fixes have not been reproduced.",
+    "checked": "The current checks look for pandas uppercase hourly frequencies, Pydantic nullable fields without defaults, and legacy web-vitals imports.",
+    "limits": "Review the scan warnings for coverage limits. Installed dependency versions are unknown. No repository code or tests were run.",
+    "nextStep": "Test the flagged code with the current and proposed dependency versions, then verify any suggested change on both."
+  }
+}

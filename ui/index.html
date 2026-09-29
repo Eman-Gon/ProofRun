@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8f5">
+  <title>Hackday Idea — dependency checks</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23222c22'/%3E%3Cpath d='M10 15h15l-5-5m10 15H15l5 5' fill='none' stroke='%23c8f58d' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to comparison</a>
+  <div class="app-shell">
+  <aside class="sidebar" aria-label="Workspace sidebar">
+    <a class="sidebar-brand" href="#workspace"><span class="brand-symbol" aria-hidden="true">⇄</span><span>Hackday Idea</span></a>
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <a id="nav-workspace" href="#workspace"><span aria-hidden="true">⌕</span>Repository checks</a>
+      <a id="nav-demo-ready" href="#demo-ready"><span aria-hidden="true">▷</span>Saved examples<span class="nav-count" id="demo-nav-count">5</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="sidebar-dot" aria-hidden="true"></span>Local workspace<p>Saved evidence, ready to explore.</p></div>
+  </aside>
+  <div class="page">
+    <header class="page-header">
+      <div class="brand"><span class="brand-symbol" aria-hidden="true">⇄</span><h1>Hackday Idea</h1></div>
+      <p>Check what breaks when a dependency changes.</p>
+    </header>
+    <main id="main" tabindex="-1">
+      <div id="connection-error" class="error-banner" role="alert" hidden></div>
+      <section id="demo-ready" class="demo-ready" aria-labelledby="demo-ready-title" hidden>
+        <div class="demo-intro"><p class="eyebrow">The curated collection</p><h2 id="demo-ready-title" tabindex="-1">Saved examples</h2><p>Five repositories with saved checks to explore. Open saved evidence instantly.</p><p class="demo-scope-note">Measured comparisons and source scans are labeled separately. An example is not a compatibility guarantee.</p></div>
+        <div id="demo-ready-list" class="demo-grid" aria-label="Example repositories"><p class="muted" role="status">Loading saved examples…</p></div>
+      </section>
+      <div id="workspace-content">
+      <div id="demo-selection" class="demo-selection" hidden><a href="#demo-ready">← Saved examples</a><span id="demo-selection-note"></span></div>
+      <form id="repository-form" class="repository-entry" aria-label="Check a GitHub repository">
+        <fieldset class="repository-source">
+          <legend>Check a repository</legend>
+          <div class="source-options">
+            <label><input type="radio" name="repository-source" id="source-mine" value="mine" checked aria-controls="my-repositories-panel"><span>My repositories</span></label>
+            <label><input type="radio" name="repository-source" id="source-public" value="public" aria-controls="public-repository-panel"><span>Public repository</span></label>
+          </div>
+        </fieldset>
+        <div id="repository-account" class="repository-account">
+          <span id="repository-account-label">Loading your public repositories…</span>
+          <button class="text-button" type="button" id="change-repository-account" aria-expanded="false" aria-controls="repository-account-editor">Change account</button>
+        </div>
+        <div id="repository-account-editor" class="repository-account-editor" hidden>
+          <label for="repository-owner">GitHub username</label>
+          <div class="repository-input-row"><input id="repository-owner" type="text" placeholder="Your GitHub username" maxlength="39" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="repository-list-error"><button class="button secondary" type="button" id="load-repositories-button">Load repositories</button></div>
+        </div>
+        <p class="entry-error" id="repository-list-error" role="alert" hidden></p>
+        <div class="repository-input-row">
+          <div class="repository-field" id="my-repositories-panel"><label class="sr-only" for="my-repository-select">My public repositories</label><select id="my-repository-select" disabled required aria-describedby="repository-list-status repository-note repository-error"><option value="">Loading repositories…</option></select></div>
+          <div class="repository-field" id="public-repository-panel" hidden><label class="sr-only" for="repository-input">Public GitHub repository URL or owner/repo</label><input id="repository-input" name="repository" type="text" placeholder="owner/repo or https://github.com/owner/repo" maxlength="300" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="repository-note repository-error" disabled></div>
+          <button class="button primary" id="repository-button" type="submit" disabled>Check repository</button>
+        </div>
+        <p class="entry-note" id="repository-list-status" role="status" hidden></p>
+        <p class="entry-note" id="repository-note">Choose one of your public repositories to check for supported dependency upgrade patterns. Repository code is not executed.</p>
+        <p class="entry-status" id="repository-status" role="status" hidden></p>
+        <p class="entry-error" id="repository-error" role="alert" hidden></p>
+      </form>
+      <div class="project-controls">
+        <div class="project-field"><label for="project-select">Saved scans &amp; prepared comparisons</label><select id="project-select" disabled><option>Loading saved checks…</option></select></div>
+        <button class="button primary" id="run-button" disabled>Run comparison</button>
+        <button class="button secondary" id="live-run-button" disabled hidden>Run live investigation</button>
+      </div>
+      <p class="controls-note" id="run-note">Prepared comparisons run locally in Docker.</p>
+      <div id="loading" class="loading-state" role="status">Loading saved results…</div>
+      <section class="run-panel" id="run-panel" hidden aria-label="Current run">
+        <div class="run-heading"><strong id="run-label" role="status"></strong><span id="run-time"></span></div>
+        <details id="run-output-disclosure"><summary>Run output</summary><pre id="run-output"></pre></details>
+      </section>
+      <div id="repository-content" hidden>
+        <section class="result-card repository-result" aria-labelledby="repository-title">
+          <div class="result-heading"><span class="result-badge neutral" id="repository-badge"></span><span class="case-kind">Public repository · source scan</span></div>
+          <h2 id="repository-title"></h2>
+          <p class="case-summary" id="repository-summary" role="status"></p>
+          <p class="scan-boundary" id="repository-boundary">These are source and manifest checks. Tests have not been run, and upgrade compatibility has not been verified.</p>
+          <section class="result-explanation" id="repository-explanation" aria-labelledby="repository-explanation-title" hidden>
+            <h3 id="repository-explanation-title">What this means</h3>
+            <p id="repository-explanation-summary"></p>
+            <p class="explanation-next"><strong>Next step</strong><span id="repository-explanation-next"></span></p>
+            <details class="explanation-details"><summary>What was checked</summary><div><p id="repository-explanation-checked"></p><p id="repository-explanation-limits"></p></div></details>
+          </section>
+          <div id="repository-findings" class="repository-findings"></div>
+          <div class="supporting-details">
+            <details class="disclosure" id="repository-dependencies"><summary id="repository-dependencies-label">Dependencies</summary><div id="repository-dependency-list" class="disclosure-content"></div></details>
+            <details class="disclosure" id="repository-scope-details"><summary>Scan details &amp; scope</summary><div class="disclosure-content source-content"><p id="repository-scope"></p><p id="repository-meta" class="muted"></p><ul id="repository-warnings"></ul><div class="source-links"><a id="repository-link" target="_blank" rel="noopener noreferrer">View repository ↗</a></div></div></details>
+            <details class="disclosure" id="repository-output-details" hidden><summary>Scan output</summary><div class="disclosure-content"><pre id="repository-output"></pre></div></details>
+          </div>
+        </section>
+        <footer class="result-footer"><span id="repository-saved-status"></span><button class="text-button" id="repository-download-button" disabled>Export scan</button></footer>
+      </div>
+      <div id="case-content" hidden>
+        <section class="result-card" aria-labelledby="case-title">
+          <div class="result-heading"><span class="result-badge" id="result-badge"></span><span class="case-kind" id="case-kind"></span></div>
+          <h2 id="case-title"></h2>
+          <p id="case-summary" class="case-summary"></p>
+          <div class="table-wrapper"><table class="comparison-table"><caption class="sr-only">Test results before and after the dependency upgrade</caption><thead><tr><th scope="col">Check</th><th scope="col"><span id="table-old"></span><small>Before</small></th><th scope="col"><span id="table-new"></span><small>After</small></th></tr></thead><tbody id="comparison-body"></tbody></table></div>
+          <section class="fix-section" aria-labelledby="fix-title">
+            <div class="section-heading"><h3 id="fix-title">Suggested fix</h3><button class="button secondary compact" id="copy-patch-button">Copy patch</button></div>
+            <p id="fix-description"></p>
+            <div class="diff-card"><div class="diff-header"><span id="fix-path"></span><span id="fix-lines"></span></div><div class="diff-code"><div class="diff-line removed"><span aria-label="Remove">−</span><code id="before-code"></code></div><div class="diff-line added"><span aria-label="Add">+</span><code id="after-code"></code></div></div></div>
+            <p id="fix-verification" class="fix-note"></p>
+          </section>
+          <section class="integration-section" id="integration-section" hidden aria-labelledby="integration-title">
+            <h3 id="integration-title">Source and memory evidence</h3>
+            <p class="integration-note">Service evidence is separate from the Docker result. An offline comparison does not refresh these services.</p>
+            <div id="integration-list" class="integration-list"></div>
+          </section>
+          <div class="supporting-details">
+            <details class="disclosure" id="test-details"><summary>Test output</summary><div id="evidence-list" class="disclosure-content"></div></details>
+            <details class="disclosure" id="source-details"><summary>Sources &amp; scope</summary><div class="disclosure-content source-content"><p id="scope-copy"></p><p id="provenance-copy"></p><div class="source-links"><a id="source-link" target="_blank" rel="noopener noreferrer">Upstream documentation ↗</a><a id="repo-link" target="_blank" rel="noopener noreferrer">Repository ↗</a></div><p id="repo-meta" class="muted"></p></div></details>
+            <details class="disclosure" id="history-details"><summary>Recent runs <span id="run-count" class="muted"></span></summary><div id="history-list" class="disclosure-content"></div></details>
+          </div>
+        </section>
+        <footer class="result-footer"><span id="saved-status"></span><button class="text-button" id="download-button">Export report</button></footer>
+      </div>
+      </div>
+    </main>
+  </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

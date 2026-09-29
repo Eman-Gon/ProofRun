@@ -1,0 +1,103 @@
+{
+  "repository": "Eman-Gon/scam_killer",
+  "repoUrl": "https://github.com/Eman-Gon/scam_killer",
+  "commit": "931c54c4ad12557b1d49f2714d10bf34b77cadee",
+  "checkedAt": "2026-09-22T02:59:19.043708+00:00",
+  "filesScanned": 7,
+  "dependencies": [
+    {
+      "name": "cra-template",
+      "version": "1.2.0",
+      "ecosystem": "npm",
+      "file": "email-sender/package.json"
+    },
+    {
+      "name": "react",
+      "version": "^18.3.1",
+      "ecosystem": "npm",
+      "file": "email-sender/package.json"
+    },
+    {
+      "name": "react-dom",
+      "version": "^18.3.1",
+      "ecosystem": "npm",
+      "file": "email-sender/package.json"
+    },
+    {
+      "name": "react-scripts",
+      "version": "5.0.1",
+      "ecosystem": "npm",
+      "file": "email-sender/package.json"
+    },
+    {
+      "name": "web-vitals",
+      "version": "^4.2.4",
+      "ecosystem": "npm",
+      "file": "email-sender/package.json"
+    }
+  ],
+  "findings": [
+    {
+      "id": "web-vitals-exports:email-sender/src/reportWebVitals.js:3",
+      "status": "static_unverified",
+      "title": "Legacy web-vitals exports need a migration review",
+      "package": "web-vitals",
+      "file": "email-sender/src/reportWebVitals.js",
+      "line": 3,
+      "beforeCode": "import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }",
+      "afterCode": "",
+      "explanation": "Static, unverified: getCLS, getFCP, getFID, getLCP, getTTFB are explicit web-vitals imports. Version 4 removed getXXX exports. Review the target version's onXXX API and its callers; FID/INP migration needs a metric decision, not a blind rename. No bundle or browser behavior was tested.",
+      "sourceUrl": "https://github.com/GoogleChrome/web-vitals/blob/main/docs/upgrading-to-v4.md"
+    }
+  ],
+  "warnings": [
+    "Lockfiles are not parsed by this inspector; dependency versions are manifest declarations only.",
+    "Archive links and special files were ignored."
+  ],
+  "scope": "Static, unverified inspection of one public default-branch commit. No repository code, tests, installs, or AI services were run. Checks cover imported pandas date_range/timedelta_range freq='H', directly imported Pydantic BaseModel nullable fields without defaults, and explicit legacy web-vitals imports/destructuring. Dependency declarations come only from package.json, requirements text files, and supported PEP 621 pyproject.toml fields; lockfiles, setup.py, notebooks, dynamic imports, indirect inheritance, and general API compatibility are not analyzed. Local/git/URL dependencies are omitted. At most 300 UTF-8 files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. No findings does not establish upgrade compatibility. Proposed changes are suggestions only and are not applied.",
+  "provenance": {
+    "metadata": "live GitHub CLI API",
+    "archive": "unauthenticated public codeload snapshot",
+    "archiveBytes": 11747689,
+    "archiveSha256": "4e93c79a39a59a3b29a5350e373a1b17e3bab7159ed64435b84e6f21b350eba9",
+    "scannerSha256": "14ac9f892746d03207fa7ddfc126ee277c51f9a810b58c0c3c7c9453ac29dfe8",
+    "note": "Public metadata resolved with GitHub CLI; pinned archive inspected with the unchanged public scanner limits and migration rules. No upstream code executed."
+  },
+  "scannedFiles": [
+    {
+      "path": "app.py",
+      "sha256": "d707d78c895e6d4d1c2f9d5a682b2e0e5ebba90d5bbec5c7415119347bdf250b"
+    },
+    {
+      "path": "email-sender/package.json",
+      "sha256": "e02d45cab3424fba5dd676e9275e4a581bf1cdfe293c70d01732de2f187fb129"
+    },
+    {
+      "path": "email-sender/src/App.js",
+      "sha256": "595c80148c2bf44d5d91dcb48ca7492584aeee2d196ce35a5876f59be360125b"
+    },
+    {
+      "path": "email-sender/src/App.test.js",
+      "sha256": "f7784693194b8657d1bf70c37ea70f4a2d694c4566ec41550a8e650eb600aaa4"
+    },
+    {
+      "path": "email-sender/src/index.js",
+      "sha256": "39f6891bebce856ce604ea450f08ace26fa1b931415985881fbb323f63ba26fb"
+    },
+    {
+      "path": "email-sender/src/reportWebVitals.js",
+      "sha256": "714851669856152806c289f9aac6240b414bbac50c60ee4f7e6247f31eac0c1c"
+    },
+    {
+      "path": "email-sender/src/setupTests.js",
+      "sha256": "22583759d0045fdf8d62c9db0aacba9fd8bddde79c671aa08c97dcfd4e930cc6"
+    }
+  ],
+  "explanation": {
+    "heading": "1 potential upgrade issue to review",
+    "summary": "The scan read 7 source or manifest files. It reported 1 potential issue. Start with email-sender/src/reportWebVitals.js:3. These are static suggestions; no code or tests were run, so failures and fixes have not been reproduced.",
+    "checked": "The current checks look for pandas uppercase hourly frequencies, Pydantic nullable fields without defaults, and legacy web-vitals imports.",
+    "limits": "Review the scan warnings for coverage limits. Open version constraints describe allowed versions, not the versions actually installed. No repository code or tests were run.",
+    "nextStep": "Test the flagged code with the current and proposed dependency versions, then verify any suggested change on both."
+  }
+}

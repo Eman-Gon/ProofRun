@@ -1,0 +1,7 @@
+{
+  "source_url": "https://pydantic.dev/docs/validation/2.8/get-started/migration/",
+  "title": "Pydantic v2.8 Migration: Required, optional, and nullable fields",
+  "evidence_quote": "A field annotated as typing.Optional[T] will be required, and will allow for a value of None.",
+  "summary": "Pydantic V2 makes an Optional field without a default required. Omitting nickname therefore fails validation after upgrading from V1. Assigning an explicit default of None preserves omission behavior.",
+  "fetched_at": "2026-09-22T02:04:59.354789+00:00"
+}
