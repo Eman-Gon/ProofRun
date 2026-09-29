@@ -309,3 +309,29 @@ pre { max-width: 100%; overflow: auto; white-space: pre; background: #f4f6f1; bo
 .graph-details ul { margin: 7px 0 0; padding-left: 18px; }
 .graph-fingerprint { font-family: ui-monospace, monospace; font-size: 11px; }
 @media (max-width: 600px) { .evidence-graph { padding: 10px; } .graph-heading { gap: 7px; } }
+
+.pr-progress { position: fixed; bottom: 24px; left: 24px; z-index: 90; display: flex; align-items: flex-start; gap: 12px; width: min(470px, calc(100vw - 48px)); padding: 18px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 8px 32px #24341c24; font-size: 13px; }
+.pr-progress[hidden] { display: none; }
+.pr-progress strong { color: #2e412a; overflow-wrap: anywhere; }
+.pr-progress p { margin: 6px 0 0; line-height: 1.5; }
+.pr-progress-note, #pr-progress-time { color: var(--muted); font-size: 12px; }
+#pr-progress-time { white-space: nowrap; margin-left: auto; }
+.pr-spinner { flex: 0 0 17px; height: 17px; border: 2px solid #dde6d8; border-top-color: #42663b; border-radius: 50%; animation: pr-spin 1s linear infinite; }
+@keyframes pr-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pr-spinner { animation: none; } }
+
+.band-panel { margin: 22px 0; padding: 22px; border: 1px solid #d9e3d4; border-radius: 12px; background: #f7faf5; }
+.band-heading, .band-heading > div { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.band-heading { justify-content: space-between; }
+.band-heading h2 { margin: 0; font-size: 18px; }
+.band-brand { padding: 5px 9px; border-radius: 6px; color: #fff; background: #31543c; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+.band-badge { font-size: 12px; padding: 5px 10px; border-radius: 20px; background: #e8ece5; }
+.band-badge.passed { background: #dfeeda; color: #315c2a; }
+.band-badge.blocked { background: #f9e8dd; color: #8a4126; }
+.band-scope, .band-boundary { color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+#band-message { font-size: 14px; font-weight: 500; }
+.band-stages { display: flex; flex-wrap: wrap; gap: 10px 20px; list-style: none; padding: 0; font-size: 13px; color: var(--muted); }
+.band-stages[hidden] { display: none; }
+.band-stages .done { color: #315c2a; }
+.band-panel summary { cursor: pointer; font-size: 13px; }
+.band-panel pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }

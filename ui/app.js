@@ -10,10 +10,37 @@ let lastProjectSignature = '';
 let lastHistorySignature = '';
 let lastRunSignature = '';
 let lastDemoSignature = '';
+let lastBandSignature = '';
 let fetching = false;
 let submitting = false;
 let submittingRepository = false;
 let submittingPr = false;
+let prProgressTimer;
+
+function startPrProgress(target, repository) {
+  submittingPr = { target, startedAt: Date.now() };
+  lastCaseSignature = '';
+  lastScanSignature = '';
+  $('pr-progress').hidden = false;
+  $('pr-progress-title').textContent = `Creating draft PR for ${repository}…`;
+  const update = () => {
+    const seconds = Math.floor((Date.now() - submittingPr.startedAt) / 1000);
+    $('pr-progress-time').textContent = `${seconds}s`;
+    $('pr-progress-detail').textContent = seconds < 30
+      ? 'Waiting for GitHub to finish creating the branch and draft pull request.'
+      : 'Still waiting for GitHub. Creating a fork or branch can take a little longer.';
+  };
+  update();
+  prProgressTimer = setInterval(update, 1000);
+}
+
+function finishPrProgress() {
+  clearInterval(prProgressTimer);
+  submittingPr = false;
+  lastCaseSignature = '';
+  lastScanSignature = '';
+  $('pr-progress').hidden = true;
+}
 let repositorySource = 'mine';
 let ownRepositories = [];
 let repositoriesLoading = false;
@@ -102,6 +129,42 @@ function hasVerifiedFix(item) {
   return check?.before?.status === 'pass' && check?.after?.status === 'pass';
 }
 function runName() { return 'Offline comparison'; }
+
+function renderBand() {
+  const band = state.band;
+  const signature = JSON.stringify(band);
+  if (signature === lastBandSignature) return;
+  lastBandSignature = signature;
+  const observation = band?.observation;
+  const receipt = observation?.receipt;
+  const status = receipt?.status;
+  $('band-badge').textContent = receipt ? `${receipt.mode === 'mock' ? 'Mock' : 'Live transport'} · ${status === 'passed' ? 'PASS' : status === 'blocked' ? 'BLOCKED' : status === 'waiting' ? 'Waiting' : 'Unavailable'}` : band?.enabled ? 'Enabled' : 'Not enabled';
+  $('band-badge').className = `band-badge${status === 'passed' ? ' passed' : status === 'blocked' || status === 'unavailable' ? ' blocked' : ''}`;
+  const stages = {
+    connecting: 'Connecting proposer and verifier to BAND…',
+    sending_candidate: 'Sending the candidate through BAND…',
+    waiting_for_verifier: 'Waiting for the verifier to receive the candidate…',
+    candidate_received: 'Verifier received the candidate.',
+    verifying: 'Running verification checks in Docker…',
+    sending_result: 'Returning the verification result through BAND…',
+    waiting_for_result: 'Waiting for the proposer to receive the result…',
+  };
+  $('band-message').textContent = status === 'passed' ? 'The recorded handoff returned PASS.'
+    : status === 'blocked' ? 'The recorded handoff returned BLOCKED. The candidate did not pass.'
+    : status === 'unavailable' ? 'The handoff could not complete. No repair was accepted through BAND.'
+    : status === 'waiting' ? (stages[receipt.stage] || 'Waiting for the BAND handoff…')
+    : band ? 'No BAND handoff has been recorded in the configured worker history yet.' : 'BAND observations are unavailable. Refresh after the dashboard restarts.';
+  $('band-observed').textContent = observation ? `Recorded ${dateLabel(observation.updatedAt)} · ${observation.runId}${status === 'waiting' ? ' · Last reported stage; updates appear as the worker records them.' : ''}` : '';
+  $('band-stages').hidden = !receipt;
+  $('band-stages').replaceChildren();
+  for (const [id, label] of [['waiting_for_verifier', 'Candidate sent'], ['candidate_received', 'Verifier received'], ['sending_result', 'Checks finished'], ['completed', 'Result returned']]) {
+    const done = receipt?.stages?.includes(id) || ['passed', 'blocked'].includes(status);
+    const item = node('li', done ? 'done' : '', `${done ? '✓' : '○'} ${label}`);
+    $('band-stages').append(item);
+  }
+  $('band-receipt').hidden = !receipt;
+  $('band-receipt-content').textContent = receipt ? JSON.stringify({run_id: observation.runId, observed_at: observation.updatedAt, ...receipt}, null, 2) : '';
+}
 
 function renderProjects() {
   const signature = JSON.stringify([state.cases.map(({ id, repository, kind }) => ({ id, repository, kind })),
@@ -308,7 +371,9 @@ function renderRepository() {
       link.rel = 'noopener noreferrer';
       article.append(link);
     } else {
-      const button = node('button', 'button primary compact', submittingPr ? 'Creating draft PR…' : 'Create draft PR');
+      const pending = submittingPr?.target === `scan:${scan.id}:${findingIndex}`;
+      const button = node('button', 'button primary compact', pending ? 'Creating draft PR…' : 'Create draft PR');
+      button.setAttribute('aria-busy', String(pending));
       button.disabled = !canPropose || !currentScan || submittingPr || !connected;
       button.addEventListener('click', () => createPublicPullRequest(scan, findingIndex));
       article.append(button, node('p', 'fix-note', !currentScan ? 'Check this public repository above to prepare a current PR suggestion.' : canPropose
@@ -514,7 +579,9 @@ function renderCase() {
   const published = publication.result;
   $('create-pr-button').hidden = !publication.eligible || Boolean(published);
   $('create-pr-button').disabled = submittingPr;
-  $('create-pr-button').textContent = submittingPr ? 'Creating draft PR…' : 'Create draft PR';
+  const pendingPr = submittingPr?.target === `case:${item.id}`;
+  $('create-pr-button').textContent = pendingPr ? 'Creating draft PR…' : 'Create draft PR';
+  $('create-pr-button').setAttribute('aria-busy', String(pendingPr));
   $('create-pr-button').title = publication.reason || '';
   $('pr-status').hidden = !published;
   if (published) {
@@ -669,6 +736,7 @@ async function refresh() {
     $('connection-error').hidden = true;
     renderProjects();
     renderDemoReady();
+    renderBand();
     renderCase();
     renderRepository();
     updateRunPanel();
@@ -755,7 +823,7 @@ async function startRun() {
 
 async function createPublicPullRequest(scan, findingIndex) {
   if (submittingPr || !window.confirm(`Create a draft PR in ${scan.result.repository} for this suggested change? Tests have not been run. A public fork will be created if needed.`)) return;
-  submittingPr = true;
+  startPrProgress(`scan:${scan.id}:${findingIndex}`, scan.result.repository);
   lastScanSignature = '';
   renderRepository();
   try {
@@ -766,11 +834,13 @@ async function createPublicPullRequest(scan, findingIndex) {
     }, 300000);
     if (!response.ok) throw new Error(result.error || 'Unable to create the draft PR.');
     scan.pullRequests = { ...scan.pullRequests, [findingIndex]: result.pullRequest };
+    const current = state.repositoryScans.find((item) => item.id === scan.id);
+    if (current) current.pullRequests = { ...current.pullRequests, [findingIndex]: result.pullRequest };
     toast(`Draft PR #${result.pullRequest.number} is ready for review.`);
   } catch (error) {
     toast(error.message, true);
   } finally {
-    submittingPr = false;
+    finishPrProgress();
     lastScanSignature = '';
     renderRepository();
   }
@@ -783,7 +853,7 @@ async function createDraftPullRequest() {
     'Create a new GitHub branch and draft pull request containing this verified fix?'
   );
   if (!confirmed) return;
-  submittingPr = true;
+  startPrProgress(`case:${item.id}`, item.repository);
   lastCaseSignature = '';
   renderCase();
   try {
@@ -794,13 +864,15 @@ async function createDraftPullRequest() {
     }, 45000);
     if (!response.ok) throw new Error(result.error || 'Unable to create the draft PR.');
     item.pullRequest.result = result.pullRequest;
+    const current = state.cases.find((candidate) => candidate.id === item.id);
+    if (current?.pullRequest) current.pullRequest.result = result.pullRequest;
     lastCaseSignature = '';
     renderCase();
     toast(`Draft PR #${result.pullRequest.number} created.`);
   } catch (error) {
     toast(error.message, true);
   } finally {
-    submittingPr = false;
+    finishPrProgress();
     lastCaseSignature = '';
     renderCase();
   }

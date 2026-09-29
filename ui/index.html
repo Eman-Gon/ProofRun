@@ -61,6 +61,15 @@
         <p class="entry-status" id="repository-status" role="status" hidden></p>
         <p class="entry-error" id="repository-error" role="alert" hidden></p>
       </form>
+      <section id="band-panel" class="band-panel" aria-labelledby="band-title">
+        <div class="band-heading"><div><span class="band-brand">BAND</span><h2 id="band-title">Repair handoff</h2></div><span id="band-badge" class="band-badge">Loading</span></div>
+        <p class="band-scope">Customer import fixture · generated-repair workflow</p>
+        <p id="band-message" role="status" aria-live="polite">Loading handoff evidence…</p>
+        <ol id="band-stages" class="band-stages" aria-label="Handoff progress" hidden></ol>
+        <p id="band-observed" class="band-scope"></p>
+        <p class="band-boundary">BAND delivers the proposed fix to the verifier and returns its verdict. Docker checks decide whether it passes. This is separate from the prepared comparisons and public repository scans below.</p>
+        <details id="band-receipt" hidden><summary>View handoff receipt</summary><pre id="band-receipt-content"></pre></details>
+      </section>
       <div class="project-controls">
         <div class="project-field"><label for="project-select">Saved scans &amp; prepared comparisons</label><select id="project-select" disabled><option>Loading saved checks…</option></select></div>
         <button class="button primary" id="run-button" disabled>Run comparison</button>
@@ -118,6 +127,13 @@
     </main>
   </div>
   </div>
+  <aside id="pr-progress" class="pr-progress" aria-label="Pull request creation" aria-busy="true" hidden>
+    <span class="pr-spinner" aria-hidden="true"></span>
+    <div><strong id="pr-progress-title" role="status" aria-live="polite">Creating draft PR…</strong>
+      <p id="pr-progress-detail"></p>
+      <p class="pr-progress-note">You can browse other results while this finishes.</p></div>
+    <span id="pr-progress-time" aria-label="Elapsed time"></span>
+  </aside>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

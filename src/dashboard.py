@@ -26,6 +26,7 @@ from .result_explanation import explain_public_result
 from .demo_ready import load_demo_ready
 from .github_pr import PullRequestError, create_draft, eligible as pr_eligible
 from .public_pr import create_public_draft
+from .dashboard_band import band_observation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -334,6 +335,7 @@ class Dashboard:
                 for row in case["checks"]:
                     row.update(before=None, after=None)
         return {"csrfToken": self.token, "cases": cases, "repositoryOwner": self.repository_owner,
+                "band": band_observation(self.root),
                 "demoReady": load_demo_ready(self.root, cases),
                 "activeRun": next((job for job in jobs if job["status"] == "running"), None),
                 "history": [job for job in jobs if job["status"] != "running"],

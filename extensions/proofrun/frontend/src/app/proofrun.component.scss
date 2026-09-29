@@ -80,3 +80,13 @@ li { margin-bottom: 6px; line-height: 1.5; }
 @media (max-width: 950px) { .layout { grid-template-columns: 1fr; } aside { max-height: 240px; overflow-y: auto; } }
 @media (max-width: 700px) { header { display: grid; } .run-options { justify-items: start; } .approved-examples { grid-template-columns: repeat(2, minmax(0,1fr)); } }
 @media (max-width: 480px) { .states, .approved-examples { grid-template-columns: 1fr; } .proofrun-page { padding: 14px; } .assessment { padding: 16px; } .assessment dl > div { grid-template-columns: 1fr; gap: 3px; } .fixture-note .section-title { align-items: start; flex-direction: column; } }
+
+.band-stages { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; padding: 0; color: #667085; }
+.band-stages li.done { color: #23613e; }
+.band-stages li.current { font-weight: 600; }
+.band-stages li span { margin-right: 5px; }
+.band-spinner { display: inline-block; width: 14px; height: 14px; margin-right: 8px; border: 2px solid #dbe1e9; border-top-color: #416b32; border-radius: 50%; animation: band-spin 1s linear infinite; }
+.band-spinner[hidden] { display: none; }
+.coordination pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@keyframes band-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .band-spinner { animation: none; } }

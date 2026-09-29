@@ -97,6 +97,12 @@ evidence digest. Each completed attempt publishes a hash-checked
 describe the handoff's checked result; `unavailable` means it could not complete.
 Execution, reproduced finding and repair status remain separate.
 
+The live verification screen shows observed handoff stages: sending the candidate,
+verifier receipt, Docker verification, and return delivery. Progress is saved with
+the run and appears on the next poll; very short stages may pass between polls.
+An expandable receipt shows the room, agents, message IDs and evidence hashes.
+Failures preserve the last observed stage and never display a completed handoff.
+
 The room receives candidate and verdict messages plus task events when
 verification starts and finishes. Room messages and provider responses are data,
 not instructions: their sender, room, message ID, one-use correlation ID and

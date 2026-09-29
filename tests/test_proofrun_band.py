@@ -236,3 +236,33 @@ def test_missing_websocket_delivery_times_out_without_verifying(fixture, config)
     assert record["repair_status"] == "unavailable"
     assert record["finding_status"] == "regression_reproduced"
     assert not verify.called and rooms[0].closed
+
+
+@pytest.mark.parametrize("fault", [None, "bad-request", "disconnect-after-check"])
+def test_progress_tracks_observed_delivery_and_preserves_failure_stage(fixture, config, fault):
+    coordinator, _ = handoff(config, fault)
+    service = fixture.service(band_handoff=coordinator)
+    snapshots = []
+    change = service._change
+
+    def observe(record, **values):
+        change(record, **values)
+        if "coordination" in values:
+            snapshots.append(json.loads(json.dumps(values["coordination"])))
+
+    service._change = observe
+    record = fixture.execute(service, repair=True)
+    stages = [row["stage"] for row in snapshots if row.get("stage") and row["status"] == "waiting"]
+    expected = ["connecting", "sending_candidate", "waiting_for_verifier",
+                "candidate_received", "verifying", "sending_result", "waiting_for_result"]
+    if fault == "bad-request":
+        expected = expected[:3]
+    elif fault == "disconnect-after-check":
+        expected = expected[:6]
+    assert stages == expected
+    final = record["coordination"]
+    assert final["stages"] == expected + ([] if fault else ["completed"])
+    assert final["status"] == ("unavailable" if fault else "passed")
+    assert final["stage"] == (expected[-1] if fault else "completed")
+    assert final["request_message_id"]
+    assert "private-key" not in json.dumps(snapshots)

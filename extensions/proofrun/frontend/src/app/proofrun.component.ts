@@ -151,8 +151,8 @@ interface ResearchSession {
                   <p role="status" aria-live="polite"><span class="band-spinner" [hidden]="run.coordination?.status !== 'waiting'" aria-hidden="true"></span>{{ bandStatus(run) }}</p>
                   <ol class="band-stages" aria-label="BAND handoff progress">
                     @for (step of bandStages; track step.id) {
-                      <li [class.done]="run.coordination?.stages?.includes(step.id)" [class.current]="run.coordination?.status === 'waiting' && run.coordination?.stage === step.id">
-                        <span aria-hidden="true">{{ run.coordination?.stages?.includes(step.id) ? '✓' : '○' }}</span> {{ step.label }}
+                      <li [class.done]="bandReached(run, step.id)" [class.current]="run.coordination?.status === 'waiting' && run.coordination?.stage === step.id">
+                        <span aria-hidden="true">{{ bandReached(run, step.id) ? '✓' : '○' }}</span> {{ step.label }}
                       </li>
                     }
                   </ol>
@@ -216,6 +216,11 @@ interface ResearchSession {
   `,
 })
 export class ProofRunComponent implements OnInit {
+  protected bandReached(run: RunSummary, stage: string): boolean {
+    const handoff = run.coordination;
+    return handoff?.stages?.includes(stage)
+      ?? ['passed', 'blocked'].includes(handoff?.status || '');
+  }
   protected readonly bandStages = [
     { id: 'waiting_for_verifier', label: 'Candidate sent' },
     { id: 'candidate_received', label: 'Verifier received candidate' },
