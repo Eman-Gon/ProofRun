@@ -1,5 +1,9 @@
 # ProofRun — core integration and three-chat build plan
 
+## Current Crusoe decision — September 29, 2026
+
+The user selected OpenRouter primary plus Crusoe serverless inference for the second fixture repair attempt after a rejected first repair, with local Docker verification. This supersedes earlier Crusoe VM-hosting requirements for the hackathon. OpenRouter continues to handle release investigation and failure research. The adapter and main ignored `.env` provider selection are implemented; live Crusoe evidence remains pending key creation and an actual measured run. The existing 76 focused repair/service checks passed, including mocked Crusoe routing, failure and secret-handling checks. See [setup and scope](docs/CRUSOE-INFERENCE.md).
+
 ## Failure research workflow — September 29, 2026
 
 The user authorized a post-finding **Research this failure** workflow. It uses
@@ -782,8 +786,14 @@ Python and shell executable files were empty. Re-pulling the exact official
 ARM image restored valid executable files. The agent now starts with zero
 restarts, and `/health` and `/docs` return HTTP 200. Receipt:
 `extensions/proofrun/evidence/agent-platform-inspection/recovery-after.json`.
-A model response through the built-in agent remains unverified; ProofRun's
-separate OpenRouter proposal path is already verified.
+A direct model response through the built-in agent subsequently passed: the
+installed `/api/sendMessage` endpoint returned HTTP 200 and the exact requested
+nonce in 14.252 seconds using OpenRouter / `anthropic/claude-sonnet-5`.
+No actual tool-use events occurred; the new-thread session bookkeeping event
+was recorded separately. Receipt:
+`extensions/proofrun/evidence/agent-platform-inspection/proofrun-agent-probe-c524810a03d74e9b8fb85daf761a45c8.json`.
+This proves the direct agent/provider path; portal UI interaction is a separate
+gate. ProofRun's own OpenRouter proposal path is independently verified.
 
 ## 10. User-selected addition — Neo4j
 
@@ -894,6 +904,24 @@ Crusoe hosting, customer deployment execution, generated repair or a portal
 selection screen. The console states Free instances are deleted after 30 days
 of inactivity; local canonical evidence remains in the worker artifact store.
 
+The regular worker on **127.0.0.1:8766** was safely restarted with its existing
+private worker settings preserved and `.env.neo4j` loaded last, using the
+pinned Neo4j environment. Connectivity and a read-only query passed; health and
+registered-case endpoints returned HTTP 200. An authenticated selection-only
+request returned HTTP 200 and exactly the expected remaining dependent
+deployment with `requires_reverification=true`. This activation check made zero
+model calls or verification runs. Receipts:
+`.commit-watch/person1-duplo-release/aura-activation.json` and
+`aura-selection.json`. The release worker and DevKit were left running unchanged.
+
+The user subsequently requested all configuration in the main `.env`. All
+worker, integration and Neo4j settings are now consolidated there: 20 settings,
+existing values preserved, no conflicting configured values, Git-ignored and
+mode `0600`. `WorkerConfig` and `GraphConfig` both validate from `.env` alone.
+Current startup instructions use only `.env`; the separate private files were
+preserved but are no longer required. Dependency files and running processes
+were not changed by this configuration consolidation.
+
 ## 11. Person 1 aggregate deployment — September 29, 2026
 
 The deployed extension is now **0.2.0**, built from the owners' stable release
@@ -910,7 +938,15 @@ evaluation repository and a registry restricted to workspace
 `6abc27f95171566ca109a084`. The backend's private
 `PROOFRUN_RELEASE_WORKER_URL` uses `http://host.docker.internal:8767`.
 No customer repository or staging deployment is configured by this integration.
-Neo4j remains disabled in these regular worker processes.
+After the Neo4j owner's approved Aura Free handoff, the regular fixture worker
+on 8766 was restarted with its existing settings preserved and the private
+`.env.neo4j` settings loaded last, using the pinned driver 6.3.1 environment.
+Connectivity, a read-only `RETURN 1`, core health and the registered-case route
+passed. A selection-only request chose exactly the expected single deployment
+still using the previous contract and marked it as requiring re-verification.
+No model calls or verification runs were made for this activation. Receipts:
+`aura-activation.json` and `aura-selection.json` in the deployment evidence root.
+The release worker on 8767 and DuploCloud services were unchanged.
 
 Actual DuploCloud release gateway execution:
 
@@ -922,6 +958,14 @@ Actual DuploCloud release gateway execution:
   repair verification. The record correctly retains `agent.status=failed`,
   `repair-1.status=verified_candidate`, and recommendation `skip`. The workflow's
   `completed` lifecycle does not mean successful agent completion.
+- The release owner subsequently added one bounded syntax-correction attempt
+  within the existing time and decision limits. Strict parsing and acceptance
+  rules remain unchanged; the failed operation stays recorded. The owner ran
+  134 release regression tests and then 43 agent tests, including additional
+  edge cases. Person 1 loaded the exact tested source into the idle worker and
+  confirmed the completed portal run is unchanged. The correction has not
+  been exercised by a new live model call. Receipt:
+  `.commit-watch/person1-duplo-release/format-correction-loaded.json`.
 - All six advertised artifacts downloaded through DuploCloud and matched
   their exact byte counts and SHA-256 hashes. Receipt:
   `.commit-watch/person1-duplo-release/gateway-run/receipt.json`.

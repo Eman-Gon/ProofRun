@@ -74,8 +74,9 @@ python -m pip install -r requirements-worker.txt -r requirements-neo4j.txt
 ```
 
 The optional driver is pinned separately; the normal worker install does not
-need it while Neo4j is disabled. Export configuration before starting the worker;
-the API does not automatically load environment files.
+need it while Neo4j is disabled. Keep all configuration in the main, ignored
+`.env` and export it before starting the worker; the API does not automatically
+load environment files.
 
 | Variable | Meaning |
 | --- | --- |
@@ -107,29 +108,41 @@ has a two-CPU/two-GiB limit, a persistent data volume and an authenticated
 readiness check. Heap and page-cache limits are explicit, following Neo4j's
 [Docker configuration conventions](https://neo4j.com/docs/operations-manual/current/docker/configuration/).
 
-From the repository root, this creates a private, ignored `.env.neo4j` only if
-it does not already exist. It preserves existing settings and prints no secret:
+For a new local database, run this from the repository root to fill missing or
+empty Neo4j settings in the main, ignored `.env`. It preserves nonempty settings
+and prints no secret. Use the configured Aura instance instead of this local
+setup when its credentials are already present.
 
 ```bash
 python - <<'PY'
 import os
 from pathlib import Path
+import re
 import secrets
 
-path = Path(".env.neo4j")
+path = Path(".env")
 if not path.exists():
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as stream:
-        stream.write(
-            "PROOFRUN_NEO4J_ENABLED=true\n"
-            "NEO4J_URI=bolt://127.0.0.1:17687\n"
-            "NEO4J_USERNAME=neo4j\n"
-            f"NEO4J_PASSWORD={secrets.token_urlsafe(32)}\n"
-            "NEO4J_DATABASE=neo4j\n"
-        )
+    os.close(fd)
+content = path.read_text()
+defaults = {
+    "PROOFRUN_NEO4J_ENABLED": "true",
+    "NEO4J_URI": "bolt://127.0.0.1:17687",
+    "NEO4J_USERNAME": "neo4j",
+    "NEO4J_PASSWORD": secrets.token_urlsafe(32),
+    "NEO4J_DATABASE": "neo4j",
+}
+for key, value in defaults.items():
+    empty = rf"(?m)^{key}=[ \t]*$"
+    if re.search(empty, content):
+        content = re.sub(empty, f"{key}={value}", content)
+    elif not re.search(rf"(?m)^{key}=", content):
+        content = content.rstrip("\n") + f"\n{key}={value}\n"
+path.chmod(0o600)
+path.write_text(content)
 PY
 set -a
-source .env.neo4j
+source .env
 set +a
 docker compose -f deploy/neo4j/compose.yaml up -d --wait --wait-timeout 180
 ```
@@ -144,20 +157,18 @@ Stop this service while retaining its data with:
 docker compose -f deploy/neo4j/compose.yaml stop
 ```
 
-For the HTTP routes, load the private worker settings first and Neo4j settings
-last, then restart the worker:
+For the HTTP routes, set `PROOFRUN_NEO4J_ENABLED=true` in the main `.env`, load
+that file, then restart the worker:
 
 ```bash
 set -a
-source .env.proofrun
-source .env.neo4j
+source .env
 set +a
 python -m src.proofrun.api --host 127.0.0.1 --port 8766 --runner native
 ```
 
-Use the private worker configuration path selected during [normal setup](../README.md)
-if it differs from `.env.proofrun`. Preserve the existing bearer token and other
-integration settings.
+Use the same main `.env` as [normal setup](../README.md). Preserve the existing
+bearer token and other integration settings.
 
 ## Worker API
 
@@ -249,7 +260,8 @@ artifacts and database relationship evidence are beside it. See the
 
 On September 29, the user approved free-only cloud setup. **ProofRun**
 (`abaa7830`) now runs on **AuraDB Free**, confirmed at **$0/hour**. Its database
-credentials are in ignored `.env.neo4j` with owner-only file permissions. No
+credentials were initially saved in `.env.neo4j` and are now consolidated in the
+main, ignored `.env` with owner-only file permissions. No
 management API key is required by this driver integration.
 
 Encrypted connectivity and the complete selection/native-Docker acceptance
@@ -257,6 +269,11 @@ passed against Aura: two of three deployments selected, 14 checks executed,
 four artifacts verified, and old-contract reuse rejected. Evidence is at
 `.commit-watch/neo4j/aura-free-acceptance-1/`; the
 [Aura validation record](../INTEGRATION.md#auradb-free-activation--september-29-2026)
-documents the actual run and its limits. Use the existing `.env.neo4j`; do not
+documents the actual run and its limits. Use the existing main `.env`; do not
 replace it with local Compose settings or expose its contents. Free instances
 are subject to deletion after 30 days of inactivity according to the console.
+
+The existing worker at `http://127.0.0.1:8766` has been restarted with these
+settings. Its authenticated selection endpoint successfully queried the Aura
+graph; health and registered-case checks also passed. Restart future workers
+by loading the main `.env`, which contains the worker and Neo4j settings.

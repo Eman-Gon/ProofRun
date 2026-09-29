@@ -1,4 +1,4 @@
-"""Bounded OpenRouter proposals. This module never runs code or assigns a verdict.
+"""Bounded OpenRouter/Crusoe proposals. This module never runs code or assigns a verdict.
 
 Only Person 2's verifier applies the returned application replacement. There is
 one network operation per attempt, no hidden retry and no prepared-fix fallback.
@@ -8,6 +8,7 @@ import base64
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import subprocess
@@ -284,7 +285,7 @@ def _read_response(config: RepairConfig, body: dict, transport=None) -> bytes:
     started = time.monotonic()
     try:
         response = session.post(
-            ENDPOINT, headers={"Authorization": f"Bearer {config.api_key}", "Content-Type": "application/json"},
+            config.endpoint, headers={"Authorization": f"Bearer {config.api_key}", "Content-Type": "application/json"},
             json=body, timeout=(min(10, config.timeout_seconds), config.timeout_seconds),
             allow_redirects=False, stream=True,
         )
@@ -318,6 +319,7 @@ def _live_request(config: RepairConfig, body: dict) -> bytes:
     # Secrets travel through stdin, never argv, environment, or files.
     request = _json({"api_key": config.api_key, "model": config.model,
                      "timeout_seconds": config.timeout_seconds, "max_tokens": config.max_tokens,
+                     "gateway": config.gateway,
                      "body": body}).encode("utf-8")
     try:
         completed = subprocess.run(
@@ -368,7 +370,7 @@ def _http_child():
     """Private process entry point. Never emits exception text or request data."""
     try:
         data = _load_json(sys.stdin.buffer.read(MAX_CONTEXT_BYTES * 3))
-        config = RepairConfig(data["api_key"], data["model"], data["timeout_seconds"], data["max_tokens"])
+        config = RepairConfig(data["api_key"], data["model"], data["timeout_seconds"], data["max_tokens"], data.get("gateway", "openrouter"))
         raw = _read_response(config, data["body"])
         result = {"response": base64.b64encode(raw).decode("ascii")}
     except ProposalUnavailable as exc:
@@ -386,6 +388,14 @@ class OpenRouterRepairClient:
         self._transport = transport
 
     def propose_patch(self, failure_context: FailureContext, attempt: int) -> PatchProposal:
+        try:
+            return self._propose_patch(failure_context, attempt)
+        except ProposalUnavailable as exc:
+            if self.config.gateway == "crusoe":
+                raise ProposalUnavailable(str(exc).replace("OpenRouter", "Crusoe").replace("OPENROUTER_API_KEY", "CRUSOE_API_KEY")) from None
+            raise
+
+    def _propose_patch(self, failure_context: FailureContext, attempt: int) -> PatchProposal:
         payload = _context_payload(failure_context, attempt)
         try:
             prompt = _bounded_text(_json(payload), MAX_CONTEXT_BYTES, "Failure context")
@@ -408,6 +418,11 @@ class OpenRouterRepairClient:
             }},
             "messages": [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": prompt}],
         }
+        if self.config.gateway == "crusoe":
+            # Keep provider-specific routing parameters away from Crusoe.
+            # Strict proposal validation below still applies without schema mode.
+            body.pop("provider")
+            body.pop("response_format")
         started = time.monotonic()
         raw = (_live_request(self.config, body) if self._transport is None
                else _read_response(self.config, body, self._transport))
@@ -456,7 +471,7 @@ class OpenRouterRepairClient:
         # Usage and provider error bodies are intentionally omitted: this small
         # allowlist provides provenance without persisting response metadata.
         provenance = {
-            "mode": self._mode, "gateway": "openrouter", "requested_model": self.config.model,
+            "mode": self._mode, "gateway": self.config.gateway, "requested_model": self.config.model,
             "model": model, "operation_id": operation, "attempt": attempt,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "candidate_sha256": _sha(candidate), "request_sha256": _sha(_json(body)),
@@ -468,10 +483,22 @@ class OpenRouterRepairClient:
         return PatchProposal(proposal["base_sha256"], _ALLOWED_PATH, candidate, rationale, provenance)
 
 
+class CrusoeRepairClient(OpenRouterRepairClient):
+    """Same proposal validation and verifier contract, explicit Crusoe endpoint."""
+    def __init__(self, config: RepairConfig, transport=None):
+        if config.gateway != "crusoe":
+            raise ConfigurationError("CrusoeRepairClient requires the Crusoe gateway.")
+        super().__init__(config, transport)
+
+
 def propose_patch(failure_context: FailureContext, attempt: int) -> PatchProposal:
     """Agreed proofrun.v1 boundary, with explicit safe unavailability."""
     try:
-        config = RepairConfig.from_env()
+        secondary = os.environ.get("PROOFRUN_SECOND_REPAIR_PROVIDER", "openrouter")
+        if secondary not in {"openrouter", "crusoe"}:
+            raise ConfigurationError("PROOFRUN_SECOND_REPAIR_PROVIDER must be openrouter or crusoe.")
+        config = RepairConfig.crusoe_from_env() if attempt == 2 and secondary == "crusoe" else RepairConfig.from_env()
     except ConfigurationError as exc:
         raise ProposalUnavailable(str(exc)) from None
-    return OpenRouterRepairClient(config).propose_patch(failure_context, attempt)
+    client = CrusoeRepairClient if config.gateway == "crusoe" else OpenRouterRepairClient
+    return client(config).propose_patch(failure_context, attempt)

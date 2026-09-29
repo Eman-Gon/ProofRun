@@ -36,6 +36,8 @@ Important source findings:
 
 ## Scope and sponsor responsibilities
 
+**Current user-selected architecture (September 29, 2026):** Keep OpenRouter for primary repair, release investigation and failure research. Use Crusoe serverless inference for fixture repair attempt 2 only after the first repair is rejected. Docker verification stays local. `PROOFRUN_SECOND_REPAIR_PROVIDER=crusoe`, `CRUSOE_API_KEY`, and `PROOFRUN_CRUSOE_MODEL` belong in the main ignored `.env`. This supersedes the CPU-hosting requirement below for the hackathon; do not claim Crusoe hosting. See [Crusoe inference setup](docs/CRUSOE-INFERENCE.md). Missing keys mean unavailable, never a substitute provider.
+
 Core:
 
 1. **DuploCloud:** local DevKit extension, manual job initiation, progress and evidence display.
@@ -84,7 +86,7 @@ Only Person 3 edits shared requirements/configuration after recording the intend
 
 ## Current development commands
 
-Use the native ProofRun worker and current sponsor configuration in `.env.example`. Follow `README.md` to create and explicitly load private environment settings; the worker does not automatically load `.env`. Existing ignored `.env.proofrun` setup may already contain the local worker token and should be preserved. Do not reintroduce earlier provider settings into the active template.
+Use the native ProofRun worker and current sponsor configuration in `.env.example`. The user requires all private settings in the main ignored `.env`; worker, research, BAND and Neo4j settings have been consolidated there without changing existing values. Follow `README.md` to explicitly load `.env`; the worker does not load it automatically. Preserve credentials when updating this file and do not require separate `.env.proofrun`, `.env.integrations` or `.env.neo4j` files for current setup. Do not reintroduce earlier provider settings into the active template.
 
 ```bash
 python3.12 -m venv .venv
@@ -92,7 +94,9 @@ source .venv/bin/activate
 python -m pip install -r requirements-worker.txt
 python deploy/crusoe/prepare-images.py --output .commit-watch/image-preparation.json
 python -m demo.upgrade.verify_offline
-# After exporting the private worker settings:
+set -a
+source .env
+set +a
 python -m src.proofrun.api --host 127.0.0.1 --port 8766 --runner native
 ```
 

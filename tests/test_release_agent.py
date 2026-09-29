@@ -424,6 +424,25 @@ class ReleaseProviderTests(unittest.TestCase):
         self.assertNotIn("format_correction_requested", result["provenance"][0])
         tool.assert_not_called()
 
+    def test_outer_json_syntax_can_be_corrected_without_accepting_fences(self):
+        invalid = completion()
+        invalid["choices"][0]["message"]["content"] = "```json\n" + invalid["choices"][0]["message"]["content"] + "\n```"
+        process, tool = Mock(side_effect=[process_response(invalid), process_response()]), Mock()
+        result = self.live(process, tool=tool)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["steps"], 2)
+        self.assertEqual(result["provenance"][0]["status"], "failed")
+        self.assertEqual(result["provenance"][0]["error_code"], "decision_json_invalid")
+        tool.assert_not_called()
+
+    def test_trace_budget_failure_prevents_syntax_correction(self):
+        process, tool = Mock(return_value=invalid_arguments_response()), Mock()
+        with patch.object(agent, "MAX_TRACE_BYTES", 10):
+            result = self.live(process, tool=tool)
+        self.assertEqual(result["status"], "budget_exhausted")
+        self.assertEqual(process.call_count, 1)
+        tool.assert_not_called()
+
     def test_expired_deadline_prevents_syntax_correction(self):
         clock = [100.0]
         def response(*args, **kwargs):

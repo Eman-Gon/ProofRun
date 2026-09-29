@@ -35,6 +35,8 @@ def main() -> int:
     parser.add_argument('--port', type=int, default=8766)
     parser.add_argument('--output-dir', type=Path, required=True, help='New private directory; existing directories are rejected')
     parser.add_argument('--expected-target', choices=['local', 'crusoe'], default='local')
+    parser.add_argument('--expected-repair-provider', choices=['openrouter', 'crusoe'], default='openrouter',
+                        help='Require live provenance from this provider for the accepted repair')
     parser.add_argument('--repair', action='store_true', help='Opt in to at most two model proposals and independent verification')
     parser.add_argument('--timeout', type=int, default=600, help='Overall polling timeout from 1 to 600 seconds')
     args = parser.parse_args()
@@ -147,7 +149,7 @@ def main() -> int:
             'regression_reproduced': record.get('finding_status') == 'regression_reproduced',
             'artifacts_collected_and_bound': bool(artifacts),
             'requested_repair_verified': record.get('repair_status') == 'verified' if args.repair else None,
-            'requested_live_openrouter_proposal': (proposal.get('mode') == 'live' and proposal.get('gateway') == 'openrouter'
+            'requested_live_' + args.expected_repair_provider + '_proposal': (proposal.get('mode') == 'live' and proposal.get('gateway') == args.expected_repair_provider
                 and bool(proposal.get('model')) and bool(proposal.get('operation_id'))) if args.repair else None,
         }
         passed = all(value for value in summary['gates'].values() if value is not None)

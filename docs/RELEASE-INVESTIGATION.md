@@ -137,7 +137,7 @@ For write probes, explicitly include the method and set `allow_synthetic_writes:
 
 The agent has bounded source tools and experiment/repair actions, not arbitrary shell access. The current limits are 30 agent decisions, eight experiments, up to 12 requests per experiment, and two repair candidates within the shared execution deadline. The runtime repeats each experiment twice on each revision; unstable or incomplete observations remain inconclusive. Model summaries cannot assign runtime verdicts.
 
-With eight experiments and two distinct sequences required per requirement, at most four requirements can reach the `update` coverage threshold in one run. Larger configurations can still produce confirmed findings, but uncovered requirements force `postpone` when no regression has been reproduced.
+One JSON syntax correction is allowed per investigation when a complete live provider response includes valid operation provenance and a parser location. The rejected response executes no action and stays recorded as failed. A fresh decision consumes the existing time and decision budgets and is linked to the rejected step. Duplicate keys, nonfinite values, invalid action arguments, policy rejections, provider failures, refusals, and truncated responses remain terminal; none receives this correction. Existing observations and repair evidence retain their measured statuses even if the agent cannot finish.
 
 Each experiment belongs to one requirement. With two distinct experiments required per requirement, the current eight-experiment cap permits complete `update` coverage for at most four requirements in one run, even though the registry accepts up to 20. Larger configured scopes remain incomplete under this budget.
 

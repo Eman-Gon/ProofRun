@@ -27,15 +27,23 @@ class RepairConfig:
     model: str
     timeout_seconds: int = 45
     max_tokens: int = 4096
+    gateway: str = "openrouter"
+
+    @property
+    def endpoint(self):
+        return {"openrouter": "https://openrouter.ai/api/v1/chat/completions",
+                "crusoe": "https://api.inference.crusoecloud.com/v1/chat/completions"}[self.gateway]
 
     def __post_init__(self):
+        if not isinstance(self.gateway, str) or self.gateway not in {"openrouter", "crusoe"}:
+            raise ConfigurationError("Unsupported repair gateway.")
         if (not isinstance(self.api_key, str) or not self.api_key or len(self.api_key) > 512
                 or not self.api_key.isascii() or any(ord(c) < 33 or ord(c) > 126 for c in self.api_key)):
-            raise ConfigurationError("Set OPENROUTER_API_KEY in server-side secret configuration.")
+            raise ConfigurationError("Set " + ("CRUSOE_API_KEY" if self.gateway == "crusoe" else "OPENROUTER_API_KEY") + " in server-side secret configuration.")
         if (not isinstance(self.model, str)
                 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.:/-]{0,180}", self.model)
                 or self.model in {"openrouter/auto", "openrouter/free"}):
-            raise ConfigurationError("Set PROOFRUN_MODEL to an explicit OpenRouter model ID.")
+            raise ConfigurationError("Set " + ("PROOFRUN_CRUSOE_MODEL" if self.gateway == "crusoe" else "PROOFRUN_MODEL") + " to an explicit provider model ID.")
         if type(self.timeout_seconds) is not int or not 1 <= self.timeout_seconds <= 60:
             raise ConfigurationError("Repair timeout must be an integer from 1 to 60 seconds.")
         if type(self.max_tokens) is not int or not 256 <= self.max_tokens <= 4096:
@@ -45,6 +53,12 @@ class RepairConfig:
     def from_env(cls, environ: Mapping[str, str] | None = None):
         env = os.environ if environ is None else environ
         return cls(api_key=_value(env, "OPENROUTER_API_KEY"), model=_value(env, "PROOFRUN_MODEL"))
+
+    @classmethod
+    def crusoe_from_env(cls, environ: Mapping[str, str] | None = None):
+        env = os.environ if environ is None else environ
+        return cls(api_key=_value(env, "CRUSOE_API_KEY"),
+                   model=_value(env, "PROOFRUN_CRUSOE_MODEL"), gateway="crusoe")
 
 
 @dataclass(frozen=True)

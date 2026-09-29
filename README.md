@@ -17,18 +17,14 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-worker.txt
 
-if [ -f .env.proofrun ]; then
-  PROOFRUN_ENV_FILE=.env.proofrun
-else
-  PROOFRUN_ENV_FILE=.env
-  if [ ! -e "$PROOFRUN_ENV_FILE" ]; then
-    cp .env.example "$PROOFRUN_ENV_FILE"
-  fi
+PROOFRUN_ENV_FILE=.env
+if [ ! -e "$PROOFRUN_ENV_FILE" ]; then
+  cp .env.example "$PROOFRUN_ENV_FILE"
 fi
 chmod 600 "$PROOFRUN_ENV_FILE"
 ```
 
-This reuses the existing private `.env.proofrun` worker configuration when present and only copies [.env.example](.env.example) when a new `.env` is needed. Keep private configuration ignored by Git. For local execution, use `PROOFRUN_EXECUTION_TARGET=local`, `PROOFRUN_WORKER_ID=local-worker` and `PROOFRUN_WORKER_URL=http://127.0.0.1:8766`.
+Use the main `.env` for worker, model and integration configuration. This only copies [.env.example](.env.example) when a new `.env` is needed. Keep private configuration ignored by Git. For local execution, use `PROOFRUN_EXECUTION_TARGET=local`, `PROOFRUN_WORKER_ID=local-worker` and `PROOFRUN_WORKER_URL=http://127.0.0.1:8766`.
 
 Set `PROOFRUN_WORKER_TOKEN` to a secret of at least 32 characters. This command fills an empty setting or adds a missing setting directly to the selected file, preserving an existing token and displaying no secret:
 
@@ -73,11 +69,7 @@ In a second terminal, activate the virtual environment and export the same priva
 
 ```bash
 source .venv/bin/activate
-if [ -f .env.proofrun ]; then
-  PROOFRUN_ENV_FILE=.env.proofrun
-else
-  PROOFRUN_ENV_FILE=.env
-fi
+PROOFRUN_ENV_FILE=.env
 set -a
 source "$PROOFRUN_ENV_FILE"
 set +a
@@ -121,13 +113,12 @@ leaves repair unavailable while preserving the reproduced finding. Without BAND
 enabled, the existing direct local verification flow remains available and makes
 no BAND integration claim.
 
-Keep the API key and two registered BAND identities in private worker settings.
-The local ignored `.env.integrations` file can be loaded after `.env.proofrun`:
+Keep the API key and two registered BAND identities in the main, ignored `.env`
+alongside the worker and other integration settings:
 
 ```bash
 set -a
-source .env.proofrun
-source .env.integrations
+source .env
 set +a
 # Install the optional SDK only when using BAND:
 python -m pip install -r requirements-band.txt
