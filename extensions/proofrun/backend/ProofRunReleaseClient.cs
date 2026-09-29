@@ -137,8 +137,9 @@ public sealed class ProofRunReleaseClient : IDisposable
             throw new ArgumentException("Supply a finding ID, request nonce and reviewed search query.");
         var query = FailureResearchReport.Query(Text(input, "query"));
         var request = input.DeepClone().AsObject(); request["query"] = query;
-        var report = await JsonAsync(workspaceId, HttpMethod.Post, $"v1/release-runs/{runId}/failure-research", request, ct);
-        try { return FailureResearchReport.Validate(report, "release", runId, Text(input, "finding_id"), workspaceId, query); }
+        var report = await JsonAsync(workspaceId, HttpMethod.Post, $"v1/release-runs/{runId}/failure-research", request, ct, 70);
+        try { return FailureResearchReport.Validate(report, "release", runId, Text(input, "finding_id"), workspaceId, query,
+            FailureResearchReport.ReleaseRequestId(workspaceId, runId, Text(input, "request_id"))); }
         catch (ArgumentException) { throw new ProofRunReleaseException("The worker returned invalid or differently bound failure research."); }
     }
 
@@ -235,11 +236,12 @@ public sealed class ProofRunReleaseClient : IDisposable
         return clean;
     }
 
-    private async Task<JsonObject> JsonAsync(string workspaceId, HttpMethod method, string path, JsonObject? body, CancellationToken ct)
+    private async Task<JsonObject> JsonAsync(string workspaceId, HttpMethod method, string path, JsonObject? body, CancellationToken ct,
+        int timeoutSeconds = 30)
     {
         using var request = Request(workspaceId, method, path);
         if (body is not null) request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
-        var bytes = await SendAsync(request, MaxJsonBytes, ct);
+        var bytes = await SendAsync(request, MaxJsonBytes, ct, timeoutSeconds);
         try
         {
             using var document = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 64 });
@@ -272,10 +274,10 @@ public sealed class ProofRunReleaseClient : IDisposable
         return request;
     }
 
-    private async Task<byte[]> SendAsync(HttpRequestMessage request, int limit, CancellationToken ct)
+    private async Task<byte[]> SendAsync(HttpRequestMessage request, int limit, CancellationToken ct, int timeoutSeconds = 30)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
             using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);

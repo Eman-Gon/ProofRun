@@ -226,22 +226,27 @@ class ReleaseAgentTests(unittest.TestCase):
 
     def test_late_decision_cannot_run_a_tool(self):
         runtime = Mock()
+        clock = [100.0]
 
         def late(*_):
-            time.sleep(.025)
+            clock[0] += 2
             return reply(action("diff", {}))
 
-        result = self.run_agent(late, runtime, seconds=.01)
+        with patch.object(agent.time, "monotonic", side_effect=lambda: clock[0]):
+            result = self.run_agent(late, runtime, seconds=1)
         self.assertEqual(result["status"], "timed_out")
         runtime.assert_not_called()
         self.assertEqual(result["provenance"][0]["status"], "timed_out")
 
     def test_late_tool_result_cannot_be_followed_by_success(self):
+        clock = [100.0]
+
         def slow(*_):
-            time.sleep(.025)
+            clock[0] += 2
             return {"outcome": "passed"}
         model = Mock(return_value=reply(action("diff", {})))
-        result = self.run_agent(model, slow, seconds=.01)
+        with patch.object(agent.time, "monotonic", side_effect=lambda: clock[0]):
+            result = self.run_agent(model, slow, seconds=1)
         self.assertEqual(result["status"], "timed_out")
         self.assertEqual(model.call_count, 1)
 

@@ -28,7 +28,7 @@ Completed sourced research can be selected for a fresh repair run; its context
 must match the original source/contract or release revisions/target, and trusted
 tests remain unchanged. No deployment or commit is part of this action.
 
-Status: **IN PROGRESS: the deployed DuploCloud extension completes a real resource-to-worker comparison; live OpenRouter repair is verified locally. Browser demonstration and Crusoe execution remain pending.** Source baseline: `7118d720ea2ae3e9bc3a2a4f7f61540348086451`, inspected September 29, 2026; subsequent measured changes are recorded below. Read [CLAUDE.md](CLAUDE.md) for current capabilities, commands, ownership and evidence rules. The user selected Similarweb and BAND for implementation; see [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md).
+Status: **IN PROGRESS: the deployed DuploCloud extension completes a real resource-to-worker comparison; live OpenRouter repair is verified locally. Browser demonstration and Crusoe execution remain pending.** Source baseline: `7118d720ea2ae3e9bc3a2a4f7f61540348086451`, inspected September 29, 2026; subsequent measured changes are recorded below. Read [CLAUDE.md](CLAUDE.md) for current capabilities, commands, ownership and evidence rules. The user selected Similarweb, BAND and Neo4j for implementation; see [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md) and section 10. These selections supersede older deferral instructions below.
 
 ## User-supplied sponsor references
 
@@ -123,6 +123,8 @@ The root `.env.example` contains only the current ProofRun stack. Use `requireme
 | `PROOFRUN_ARTIFACT_DIR` | Worker | Private persisted evidence location |
 | `PROOFRUN_EXECUTION_TARGET` | Worker | `local` / `crusoe`; a label alone is not hosting evidence |
 | `PROOFRUN_WORKER_ID` | Worker | `local-worker` locally; the recorded VM identity on Crusoe |
+| `PROOFRUN_NEO4J_ENABLED` | Worker selection service | Defaults to `false`; enable only with explicit database configuration |
+| `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE` | Worker graph store | Private database access; never passed to verification containers |
 | Setup-managed DuploCloud settings | DevKit | Admin verification, gateway and workspace |
 | Crusoe account/VM access | Deployment operator | Provisioning and host management, outside test containers |
 
@@ -132,7 +134,7 @@ Put pins, image identities, test limits and case selection in versioned manifest
 
 Version: `proofrun.v1`. Owner: Person 1; Persons 2 and 3 acknowledge it before implementing consumers. All endpoints, new modules and types below are **proposed**, not callable features at the inspected baseline.
 
-One worker, one concurrent run and file-backed records/artifacts are enough. Use atomic state writes; avoid a new queue/database. An interrupted job after restart must not appear completed.
+One worker, one concurrent run and file-backed canonical run records/artifacts are enough. Use atomic state writes; avoid a new execution queue. The selected Neo4j integration adds deployment selection and a projection of measured evidence, without replacing these records. An interrupted job after restart must not appear completed.
 
 ### HTTP boundary
 
@@ -271,7 +273,7 @@ Work in this order:
 4. Integrate Person 2's comparison/verifier and Person 3's model client and Crusoe endpoint. Own the bounded orchestration loop; never override the verifier's result.
 5. Demonstrate the real round trip and record exact commands, results, revision and remaining limitations.
 
-Keep secrets out of chat and frontend responses. If access is missing, identify the exact blocker and continue independent local work. Keep all optional sponsors deferred until the recorded core gate passes. Do not commit or push unless requested.
+Keep secrets out of chat and frontend responses. If access is missing, identify the exact blocker and continue independent local work. Similarweb, BAND and Neo4j are user-selected additions; keep Plaud and Vultr deferred. Do not commit or push unless requested.
 
 Finish each handoff with: changed paths; branch/worktree and revision or diff; interface version; checks actually run; evidence location; mocks or incomplete integrations; and the next action for Persons 2 and 3.
 ```
@@ -295,7 +297,7 @@ Work in this order:
 4. Verify a narrow repair and reject a deliberately overpermissive candidate. The repairer must not edit your tests, expected outcomes or dependency pins.
 5. Preserve exact source, contract, environment, test and candidate identities. Reject missing tests, incorrect versions, stale evidence and unsupported inputs. Maintain isolated, bounded Docker execution.
 
-Deliver measured results and artifacts to Person 1, then run the same checks on Person 3's Crusoe worker. Never label mocked or saved output as a live execution. Continue useful offline work if another person's integration is unavailable. Keep optional work deferred. Do not commit or push unless requested.
+Deliver measured results and artifacts to Person 1, then run the same checks on Person 3's Crusoe worker. Never label mocked or saved output as a live execution. Continue useful offline work if another person's integration is unavailable. Similarweb, BAND and Neo4j are user-selected additions; keep Plaud and Vultr deferred. Do not commit or push unless requested.
 
 Finish each handoff with: changed paths; branch/worktree and revision or diff; interface version; commands and results; evidence location; remaining scope limits; and what Persons 1 and 3 need next.
 ```
@@ -319,7 +321,7 @@ Work in this order:
 4. Deploy the compatible worker on Crusoe, prepare pinned test environments and provide an authenticated reachable connection to Person 1. Routing model inference to Crusoe is not evidence of worker hosting.
 5. Execute Person 2's checks on that worker and retain actual host, environment and test evidence. Keep model credentials outside test containers and browser data.
 
-The repairer cannot edit tests, expected outputs or case dependency pins, and cannot declare a repair verified. Only Person 2's executed checks provide that verdict. Keep the local fallback labeled and all optional sponsors deferred until the core gate passes. Do not commit or push unless requested.
+The repairer cannot edit tests, expected outputs or case dependency pins, and cannot declare a repair verified. Only Person 2's executed checks provide that verdict. Keep local execution labeled. Similarweb, BAND and Neo4j are user-selected additions; keep Plaud and Vultr deferred. Do not commit or push unless requested.
 
 Finish each handoff with: changed paths; branch/worktree and revision or diff; interface version; actual model/worker checks; evidence location; access blockers; and connection details needed by Persons 1 and 2, excluding secrets.
 ```
@@ -636,10 +638,10 @@ still require the healthy portal; this compile alone is not a portal run.
 
 ## 9. User-selected additions — Similarweb and BAND
 
-On September 29, 2026, the user selected exactly **Similarweb + BAND** to
+On September 29, 2026, the user initially selected **Similarweb + BAND** to
 implement now. This explicitly supersedes their earlier core-first deferral;
-it does not mark any outstanding core gate complete. Neo4j, Plaud and Vultr
-remain deferred.
+it does not mark any outstanding core gate complete. The later Neo4j request is
+recorded in section 10; Plaud and Vultr remain deferred.
 
 Similarweb research uses a separate authenticated worker route:
 `POST /v1/customer-research` with exactly `request_id`, `domain`, and a completed
@@ -775,6 +777,91 @@ The image healthchecks targeted incorrect internal ports (studio 80 instead of
 60021; UI 8080 instead of 80). The sibling default compose override now checks
 the actual listeners. Both studio and UI report **healthy**, with evidence at
 `../proofrun-duplocloud-devkit/temp/proofrun-devkit-healthchecks.json`. The
-built-in agent remains unverified: its image exits with Python `exec format
-error` and is under investigation. This does not affect the separately verified
-ProofRun worker's OpenRouter proposal path.
+built-in agent initially failed with Python `exec format error`: its local
+Python and shell executable files were empty. Re-pulling the exact official
+ARM image restored valid executable files. The agent now starts with zero
+restarts, and `/health` and `/docs` return HTTP 200. Receipt:
+`extensions/proofrun/evidence/agent-platform-inspection/recovery-after.json`.
+A model response through the built-in agent remains unverified; ProofRun's
+separate OpenRouter proposal path is already verified.
+
+## 10. User-selected addition — Neo4j
+
+On September 29, 2026, the user requested Neo4j implementation. This supersedes
+its earlier deferral, including the historical core-first and one-at-a-time
+instructions. Similarweb and BAND remain selected; Plaud and Vultr remain
+deferred. Outstanding DuploCloud, Crusoe and other live-provider gates retain
+their existing status.
+
+The selection schema is `proofrun.graph.v1`. Neo4j stores explicit deployment
+IDs, source revisions/content hashes, versioned
+contracts/cases and measured runs. A change from an old contract hash to a new
+hash produces an immutable affected-deployment selection with explaining paths.
+The graph selects work; the existing `proofrun.v1` verifier determines outcomes.
+Core file-backed run records and artifacts remain canonical. Historical evidence
+for another source, revision or contract cannot satisfy a new selection.
+`measured` records complete native execution, including a reproduced regression;
+it never means deployment approval or an automatic change to a dependency pin.
+
+The worker adds bearer-authenticated `POST /v1/deployments`,
+`POST /v1/contract-changes`, `GET /v1/contract-changes/{change_id}`, and
+`POST /v1/contract-changes/{change_id}/runs`. The final route accepts a selected
+`deployment_id` and `job_key`, validates the current source and target contract
+against the registered fixture, then submits a comparison run. Retrieving the
+selection synchronizes terminal core-run evidence into Neo4j. Unsupported or
+stale bindings fail before execution; graph state cannot create an accepted
+repair. These additions do not change the existing `/v1/runs` contract.
+
+`PROOFRUN_NEO4J_ENABLED=false` remains the default. Enabling it requires the
+optional pinned driver and a real database configured through `NEO4J_URI`,
+`NEO4J_USERNAME`, `NEO4J_PASSWORD`, and optional `NEO4J_DATABASE` (default
+`neo4j`). Missing access fails visibly with no memory or alternate-storage
+fallback. Credentials stay outside model requests, browser data and test
+containers. Parameterized Cypher preserves explicit input boundaries.
+
+Follow [docs/NEO4J.md](docs/NEO4J.md) for private configuration, the localhost-only
+Compose service and the repeatable acceptance command. Acceptance requires
+three synthetic deployments, two contracts, exactly two selected dependents,
+explaining paths, a fresh selected core run and rejection of old-contract
+coverage. `python -m src.proofrun.neo4j_demo --output-dir <new-directory>` starts
+its own authenticated local worker and writes `receipt.json`, `run.json` and
+hash-checked downloaded artifacts. It also verifies identical retry reuse and
+rejects an unregistered next contract. Synthetic nodes remain namespaced in the
+database; no existing graph data is cleared. Live database/Docker measurements
+must be recorded separately from
+mocked unit tests. A Neo4j implementation or local database does not establish
+Aura, production infrastructure discovery or remote worker hosting.
+
+### Neo4j validation — September 29, 2026
+
+- **223 tests passed** across the graph store/service/API, core worker/API,
+  native verifier, repair adapter and failure-research HTTP checks. Mocks and
+  synthetic runner records remain labeled in those unit tests.
+- Fresh authenticated localhost acceptance used real Neo4j Community **5.26.28**
+  (cached immutable image digest recorded in `database-evidence.json`) and the
+  pinned **6.3.1** Python driver. Three synthetic deployments shared two
+  contracts; changing one selected exactly its two dependents with explaining
+  paths. No customer deployment was contacted.
+- Selected run `run-329496b97239440d8fdbf6eb7087bc84` completed **14 native Docker
+  checks**, reproduced the expected Pydantic regression, and returned **four
+  hash-checked artifacts**. Neo4j retained its exact source/contract/run
+  relationship. Repeating the same selected request reused that run. A later,
+  unregistered contract version was rejected before execution and could not
+  adopt the old measurement.
+- Evidence directory: `.commit-watch/neo4j/live-acceptance-1/`, containing
+  `receipt.json`, `run.json`, `database-evidence.json`, downloaded artifacts and
+  underlying worker/selection records. Credentials were checked absent from
+  these artifacts. The disposable database was removed after collection;
+  regular worker configuration remains opt-in.
+- Compose configuration validated for the shipped **5.26.31-community** image;
+  that image downloaded successfully. The recorded acceptance used **5.26.28**,
+  not the shipped newer patch. An initial connection check before the temporary
+  database finished starting returned unavailable; initialization succeeded
+  after readiness, with no fallback storage.
+- Review added causal bookmarks across database sessions, durable private job
+  identities, invalidation on trusted test/pin/verifier changes, and retention
+  of earlier completed selected runs. These guards have regression coverage.
+
+This proves local live Neo4j selection connected to the existing verifier. It
+does not establish Aura access, production deployment verification, a portal
+selection screen, Crusoe execution, or generated repair for this graph demo.

@@ -92,7 +92,16 @@ def test_query_is_the_only_customer_data_sent_and_search_is_bounded(tmp_path):
         assert body["tools"][0] == {"type": "openrouter:web_search", "parameters": {
             "engine": "exa", "max_results": 5, "max_total_results": 5, "max_characters": 2000, "max_uses": 1}}
         assert body["max_tool_calls"] == 1
-        assert transport.calls[0][1]["timeout"][1] == 25
+        response_format = body["response_format"]
+        assert response_format["type"] == "json_schema"
+        schema = response_format["json_schema"]
+        assert schema["strict"] is True and schema["name"] == "proofrun_failure_research"
+        assert schema["schema"]["additionalProperties"] is False
+        assert set(schema["schema"]["required"]) == {"summary", "summary_source_urls", "suggested_fixes"}
+        suggestion_schema = schema["schema"]["properties"]["suggested_fixes"]["items"]
+        assert suggestion_schema["additionalProperties"] is False
+        assert set(suggestion_schema["required"]) == {"description", "source_urls"}
+        assert transport.calls[0][1]["timeout"][1] == 60
         assert transport.calls[0][1]["allow_redirects"] is False
         assert KEY not in json.dumps(result)
         assert service.get(result["research_id"]) == result
@@ -329,3 +338,38 @@ def test_invalid_injected_client_report_cannot_persist_claims(tmp_path):
         assert service.get(report["research_id"]) == report
     finally:
         service.close()
+
+
+@pytest.mark.parametrize("language", ["json", ""])
+def test_one_complete_json_fence_is_normalized_before_strict_validation(language):
+    value = envelope()
+    message = value["choices"][0]["message"]
+    message["content"] = "```" + language + "\n" + message["content"] + "\n```"
+    provider, _ = client(value)
+    report = provider.fetch(QUERY)
+    assert report["status"] == "completed"
+    assert report["suggested_fixes"][0]["source_ids"] == ["source-1"]
+
+
+@pytest.mark.parametrize("wrapper", [
+    "Here is the answer:\n```json\n%s\n```", "```json\n%s\n```\nAdditional prose",
+    "```json\n%s", "%s\n```", "```json\n%s\n```\n```json\n{}\n```",
+    "```python\n%s\n```", "```json %s```", "````json\n%s\n````",
+])
+def test_prose_partial_or_multiple_fences_are_not_salvaged(wrapper):
+    value = envelope()
+    message = value["choices"][0]["message"]
+    message["content"] = wrapper % message["content"]
+    provider, _ = client(value)
+    report = provider.fetch(QUERY)
+    assert report["status"] == "unavailable"
+    assert report["error"]["code"] == "invalid_response"
+    assert report["suggested_fixes"] == report["sources"] == []
+
+
+def test_fenced_json_keeps_exact_key_and_citation_validation():
+    value = changed_content(envelope(), summary_source_urls=[OTHER])
+    message = value["choices"][0]["message"]
+    message["content"] = "```json\n" + message["content"] + "\n```"
+    provider, _ = client(value)
+    assert provider.fetch(QUERY)["error"]["code"] == "invalid_response"

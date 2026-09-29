@@ -153,6 +153,14 @@ def _parse_response(raw: bytes, provenance: dict) -> dict:
         return {"status": "no_sources", "summary": "No usable cited sources were returned. No fix was inferred.",
                 "sources": [], "suggested_fixes": [], "provenance": provenance, "error": None}
     content = _text(message.get("content"), 14000)
+    # Some providers wrap schema-conforming JSON in one Markdown fence even
+    # when strict output was requested. Strip only that complete envelope;
+    # prose, partial/nested fences and multiple blocks remain invalid.
+    if content.startswith("```"):
+        fenced = re.fullmatch(r"```(?:json)?\r?\n(.*?)\r?\n```", content, re.DOTALL)
+        if fenced is None or "```" in fenced[1]:
+            raise ValueError("Invalid structured-output fence")
+        content = fenced[1]
     result = _load_json(content)
     if not isinstance(result, dict) or set(result) != {"summary", "summary_source_urls", "suggested_fixes"}:
         raise ValueError("Invalid research result")
@@ -198,13 +206,26 @@ class OpenRouterFailureResearchClient:
         if config.api_key in query:
             return _unavailable("invalid_query", "The query contains credential material and was not sent.", provenance)
         # Search has a separate bounded request and cannot extend the test deadline.
-        config = RepairConfig(config.api_key, config.model, min(config.timeout_seconds, 25), config.max_tokens)
+        config = RepairConfig(config.api_key, config.model, 60, config.max_tokens)
         body = {"model": config.model, "stream": False,
                 "messages": [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": query}],
                 "max_tokens": config.max_tokens, "provider": {"allow_fallbacks": False, "require_parameters": True},
                 "tools": [{"type": "openrouter:web_search", "parameters": {
                     "engine": "exa", "max_results": 5, "max_total_results": 5, "max_characters": 2000, "max_uses": 1}}],
-                "max_tool_calls": 1, "response_format": {"type": "json_object"}}
+                "max_tool_calls": 1, "response_format": {"type": "json_schema", "json_schema": {
+                    "name": "proofrun_failure_research", "strict": True,
+                    "schema": {"type": "object", "additionalProperties": False,
+                        "required": ["summary", "summary_source_urls", "suggested_fixes"],
+                        "properties": {
+                            "summary": {"type": "string", "description": "Plain-text summary under 1500 characters; empty if no source supports a useful match."},
+                            "summary_source_urls": {"type": "array", "items": {"type": "string"},
+                                "description": "One to five exact retrieved URLs supporting the summary, or empty with an empty summary."},
+                            "suggested_fixes": {"type": "array", "description": "At most three unverified suggestions supported by retrieved sources.",
+                                "items": {"type": "object", "additionalProperties": False,
+                                    "required": ["description", "source_urls"], "properties": {
+                                        "description": {"type": "string", "description": "Advisory suggestion under 1500 characters; identify uncertainty and version applicability."},
+                                        "source_urls": {"type": "array", "items": {"type": "string"},
+                                            "description": "One to five exact retrieved URLs supporting this suggestion."}}}}}}}}}
         provenance.update(requested_model=config.model, request_sha256=_sha(_json(body).encode()))
         try:
             raw = _read_response(config, body, self._transport) if self._transport is not None else _live_request(config, body)

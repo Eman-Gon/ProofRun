@@ -1,0 +1,2 @@
+# Optional dependency selection; official driver release verified on PyPI.
+neo4j==6.3.1

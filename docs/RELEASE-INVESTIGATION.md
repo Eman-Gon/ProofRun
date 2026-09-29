@@ -8,6 +8,8 @@ The first supported class is **HTTP response compatibility**. A confirmed findin
 
 This guide describes the implementation and its configuration contract. Injected model callbacks and mocked Docker/HTTP tests exercise policy and failure handling; they are not a live provider investigation, a real product run, or a staging deployment. Example configuration validation does not establish that its repository, images, or application are runnable. The DuploCloud gateway must be verified against the actual workspace authorization SDK and a running worker before claiming an end-to-end portal run.
 
+The separate [measured validation record](RELEASE-INVESTIGATION-VALIDATION.md) documents an actual authenticated API, OpenRouter and Docker run that discovered two regressions and verified a generated repair in 232.09 seconds on a synthetic product.
+
 No live provider call, application execution, or staging replay is implied by these examples. Record actual run IDs, revision/image hashes, artifacts, and execution results when performing that verification.
 
 ## Configure a target
@@ -134,6 +136,8 @@ For write probes, explicitly include the method and set `allow_synthetic_writes:
 ## Interpret the result
 
 The agent has bounded source tools and experiment/repair actions, not arbitrary shell access. The current limits are 30 agent decisions, eight experiments, up to 12 requests per experiment, and two repair candidates within the shared execution deadline. The runtime repeats each experiment twice on each revision; unstable or incomplete observations remain inconclusive. Model summaries cannot assign runtime verdicts.
+
+With eight experiments and two distinct sequences required per requirement, at most four requirements can reach the `update` coverage threshold in one run. Larger configurations can still produce confirmed findings, but uncovered requirements force `postpone` when no regression has been reproduced.
 
 Each experiment belongs to one requirement. With two distinct experiments required per requirement, the current eight-experiment cap permits complete `update` coverage for at most four requirements in one run, even though the registry accepts up to 20. Larger configured scopes remain incomplete under this budget.
 

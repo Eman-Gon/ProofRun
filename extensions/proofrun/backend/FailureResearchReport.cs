@@ -1,12 +1,19 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Text;
+using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace Duplo.Extension.ProofRun;
 
 // Shared browser allowlist for advisory search reports. No provider payloads or HTML are rendered.
 public static class FailureResearchReport
 {
+    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+    public static string ResearchId(string requestId) => "failure-research-" + Hash(requestId);
+    public static string ReleaseRequestId(string scope, string runId, string nonce)
+        => "release-research-" + Hash(JsonSerializer.Serialize(new[] { scope, runId, nonce }));
     public static bool IsId(string value) => Regex.IsMatch(value, @"\Afailure-research-[a-f0-9]{64}\z");
     public static string Text(JsonObject value, string name)
         => value[name] is JsonValue item && item.TryGetValue<string>(out var text) ? text : "";
@@ -29,7 +36,7 @@ public static class FailureResearchReport
     }
 
     public static JsonObject Validate(JsonObject report, string kind, string runId, string findingId,
-        string scope, string? query = null)
+        string scope, string? query = null, string? expectedRequestId = null)
     {
         const string invalid = "The worker returned invalid or differently bound failure research.";
         void Require(bool value) { if (!value) throw new ArgumentException(invalid); }
@@ -39,6 +46,8 @@ public static class FailureResearchReport
             && Bounded(report, "query", 1200) && (query is null || Text(report, "query") == query)
             && Bounded(report, "summary", 6000, true)
             && DateTimeOffset.TryParse(Text(report, "observed_at"), out _));
+        Require(Text(report, "research_id") == ResearchId(Text(report, "request_id"))
+            && (expectedRequestId is null || Text(report, "request_id") == expectedRequestId));
         if (report["context"] is not JsonObject context) throw new ArgumentException(invalid);
         Require(Text(context, "kind") == kind && Text(context, "run_id") == runId
             && Text(context, "finding_id") == findingId && Text(context, "scope") == scope

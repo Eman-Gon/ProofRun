@@ -6,7 +6,7 @@ using Duplo.Extension.ProofRun;
 // Injected HTTP transport only; no live provider or portal claims.
 const string scope = "workspace-one";
 const string query = "pydantic 2.8.2 Optional Field required";
-var researchId = "failure-research-" + new string('a', 64);
+var researchId = FailureResearchReport.ResearchId("request-1");
 var count = 0;
 void Check(bool ok) { if (!ok) throw new Exception("Check failed"); count++; }
 async Task Reject(Func<Task> action)
@@ -43,7 +43,8 @@ foreach (var mutation in new Action<JsonObject>[] {
     r => r["sources"]![0]!["url"] = "https://user:secret@docs.pydantic.dev/",
     r => r["suggested_fixes"]![0]!["source_ids"] = new JsonArray("invented-source"),
     r => r["status"] = "no_sources",
-    r => r["query"] = "different query"
+    r => r["query"] = "different query",
+    r => r["request_id"] = "different-request"
 }) {
     var changed = report.DeepClone().AsObject(); mutation(changed);
     await Reject(() => { FailureResearchReport.Validate(changed, "fixture", "run-1", "regression", scope, query); return Task.CompletedTask; });
@@ -59,11 +60,15 @@ using (var client = new ProofRunWorkerClient("http://localhost:8766", "test-toke
     });
     Check(req.Headers.GetValues("X-ProofRun-Scope").Single() == scope);
     Check(req.RequestUri!.AbsolutePath == "/v1/runs/run-1/failure-research");
-    return Json(report);
+    var response = report.DeepClone().AsObject();
+    var body = JsonNode.Parse(req.Content!.ReadAsStringAsync().Result)!.AsObject();
+    response["request_id"] = body["request_id"]!.DeepClone();
+    response["research_id"] = FailureResearchReport.ResearchId(response["request_id"]!.GetValue<string>());
+    return Json(response);
 }))) {
     var value = await client.FailureResearchAsync(scope, "resource-one", "run-1",
         new() { ClientNonce = Guid.NewGuid().ToString(), Query = query }, default);
-    Check(value["research_id"]!.GetValue<string>() == researchId);
+    Check(value["research_id"]!.GetValue<string>() == FailureResearchReport.ResearchId(value["request_id"]!.GetValue<string>()));
     await Reject(() => client.FailureResearchAsync(scope, "another-resource", "run-1",
         new() { ClientNonce = Guid.NewGuid().ToString(), Query = query }, default));
     Check(calls == 3); // cross-resource request never reached the research provider route
@@ -72,7 +77,11 @@ var releaseId = "release-" + new string('a', 40);
 using (var client = new ProofRunReleaseClient("http://localhost:8767", "test-release-token-01234567890123456789", new Handler(req => {
     Check(req.Headers.GetValues("X-ProofRun-Scope").Single() == scope);
     Check(req.RequestUri!.AbsolutePath == $"/v1/release-runs/{releaseId}/failure-research");
-    return Json(Report("release", releaseId, "finding-1"));
+    var response = Report("release", releaseId, "finding-1");
+    var body = JsonNode.Parse(req.Content!.ReadAsStringAsync().Result)!.AsObject();
+    var requestId = FailureResearchReport.ReleaseRequestId(scope, releaseId, body["request_id"]!.GetValue<string>());
+    response["request_id"] = requestId; response["research_id"] = FailureResearchReport.ResearchId(requestId);
+    return Json(response);
 }))) {
     var value = await client.FailureResearchAsync(scope, releaseId, new() {
         ["request_id"] = Guid.NewGuid().ToString(), ["query"] = query, ["finding_id"] = "finding-1"

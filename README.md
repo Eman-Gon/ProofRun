@@ -1,10 +1,12 @@
 # ProofRun
 
-ProofRun reproduces a supported dependency regression and independently verifies a bounded repair. The current case checks customer-import behavior across Pydantic 1.10.18 and 2.8.2 using approved synthetic inputs. Results keep execution, finding and repair status separate, with evidence tied to the exact source, contract, tests, candidate and environment.
+ProofRun investigates configured HTTP application releases at two exact Git commits. An agent inspects source and diffs, chooses synthetic experiments, and proposes bounded repairs. An independent harness compares repeated executions, preserves original tests, and reports **update, skip, or postpone** within a configured budget. Start with the [release investigation guide](docs/RELEASE-INVESTIGATION.md) and [measured validation](docs/RELEASE-INVESTIGATION-VALIDATION.md).
+
+The retained fixture demo checks customer-import behavior across Pydantic 1.10.18 and 2.8.2 using approved synthetic inputs. Both paths keep execution, finding and repair status separate, with evidence tied to source, requirements, tests, candidate and environment.
 
 The chosen demo: **an FDE has a customer meeting in 20 minutes and needs to check a dependency update against five approved customer-import examples.** See the [demo runbook and two-minute talk track](docs/FDE-DEMO.md). The available local proof executes a Python function in Docker; it does not replay requests against a staging API.
 
-The planned integrated demo uses **DuploCloud** for initiation and evidence display, **Crusoe** for the CPU worker, and **OpenRouter** for generated repair proposals. Local worker execution is available. The complete DuploCloud portal round trip, Crusoe execution and live OpenRouter proposal still need their integration gates verified; see [the integration record](INTEGRATION.md).
+The integrations use **DuploCloud** for initiation and evidence display, **Crusoe** for CPU hosting, and **OpenRouter** for model access. Local release investigation has been exercised with actual model calls and Docker execution. See [the integration record](INTEGRATION.md) for the separate portal, hosting and fixture milestones; these are distinct from customer staging verification.
 
 ## Local setup
 
@@ -101,10 +103,11 @@ Follow the [Crusoe deployment guide](deploy/crusoe/README.md) for the service in
 
 ## Development and scope
 
-The two selected additions are **Similarweb customer research** and **BAND repair
-coordination**. Their local implementation and tests are separate from proof of
-live sponsor access. See [Similarweb setup](docs/SIMILARWEB.md) and
-[BAND setup](docs/BAND.md) for the exact prerequisites and commands.
+The selected additions are **Similarweb customer research**, **BAND repair
+coordination**, and **Neo4j deployment selection**. Their local implementation
+and tests are separate from proof of live sponsor access. See
+[Similarweb setup](docs/SIMILARWEB.md), [BAND setup](docs/BAND.md), and
+[Neo4j setup and acceptance demo](docs/NEO4J.md) for prerequisites and commands.
 
 The extension's explicit customer-research action asks for a public domain and a
 completed month. The worker retrieves Similarweb estimated website visits and
@@ -131,7 +134,17 @@ python -m pip install -r requirements-band.txt
 ```
 
 Restart the worker with those exported settings to apply them. Portal credentials
-remain separate. Neo4j, Plaud and Vultr are outside this selected increment.
+remain separate. Plaud and Vultr remain deferred.
+
+Neo4j is off by default. When enabled, explicit deployment revisions and versioned
+contracts determine which deployments need rechecking after a contract change.
+Authenticated worker routes return the affected deployments and explaining
+paths, then submit a selected deployment to the existing registered verifier.
+The graph records measured run evidence; only executed core checks determine the
+result. Old contract/revision evidence cannot satisfy the new selection, and an
+unavailable database never falls back to memory storage. Install
+`requirements-neo4j.txt` and follow [the Neo4j guide](docs/NEO4J.md) to configure a
+local database or an existing authorized instance.
 
 Run the focused worker checks in the worker environment:
 
@@ -143,7 +156,7 @@ python -m pytest tests/test_proofrun_api.py tests/test_proofrun_service.py \
 
 These tests exercise API, orchestration, verification and proposal handling, using mocks where appropriate. They do not establish live sponsor integration. The separate Docker experiment and actual service runs provide runtime evidence.
 
-The supported scope is one registered Python/Pydantic fixture. Arbitrary repository execution, automatic repository changes and automatic deployment are not implemented. A verified candidate passed the declared checks; its evidence is limited to the supplied source, inputs and environments.
+The commands above exercise the registered Python/Pydantic fixture. The separate [release investigation worker](docs/RELEASE-INVESTIGATION.md) supports operator-configured Git repositories, pinned execution images and HTTP response-compatibility requirements. It generates previously unspecified probes within that scope; it does not establish arbitrary-bug discovery or exhaustive repository coverage. Verified repairs remain reviewable candidates, with evidence limited to the tested inputs and environments.
 
 ## Local dashboard
 

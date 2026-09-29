@@ -1,8 +1,8 @@
 # ProofRun: selected additions and deferred sponsors
 
-Status: **SIMILARWEB + BAND IMPLEMENTED LOCALLY — live integration unverified.**
+Status: **NEO4J IMPLEMENTED AND VERIFIED WITH LOCAL DOCKER; SIMILARWEB + BAND IMPLEMENTED LOCALLY.** See each integration's validation record for measured access and remaining gates.
 
-On September 29, 2026, the user explicitly selected **Similarweb + BAND** for implementation now. This supersedes the earlier core-first deferral and one-at-a-time restriction for these two additions. Neo4j, Plaud and Vultr remain deferred. Follow `CLAUDE.md` and `INTEGRATION.md` for the core build; its incomplete gates remain incomplete. Documentation, unit tests and saved reports do not establish a live sponsor integration.
+On September 29, 2026, the user explicitly selected **Similarweb + BAND**, then requested **Neo4j** implementation. These requests supersede the earlier core-first deferral and one-at-a-time restriction for the selected additions. Plaud and Vultr remain deferred. Follow `CLAUDE.md` and `INTEGRATION.md` for the core build; its incomplete gates remain incomplete. Documentation, unit tests and saved reports do not establish a live sponsor integration.
 
 Similarweb supplies dated website context for the FDE's meeting brief. BAND carries the exact repair candidate to the trusted verifier and returns the consequential verdict. Customer research cannot modify the test contract or repair status. Enabling BAND requires a completed room handoff; transport failure cannot fall back to direct verification.
 
@@ -35,21 +35,21 @@ Person 1 assembles the completion record; Person 2 supplies verification evidenc
 | Integration owner | Person 1 |
 | Gate status | DEFERRED |
 
-After every core check passes, record `CORE_COMPLETE` with evidence. The selected scope is exactly Similarweb and BAND. No additional optional integration should be activated as part of this increment.
+After every core check passes, record `CORE_COMPLETE` with evidence. The selected scope is Similarweb, BAND and Neo4j. Plaud and Vultr are outside this increment.
 
 ## Optional integrations
 
-The sections below describe intended responsibilities. Consult [Similarweb setup](docs/SIMILARWEB.md) and [BAND setup](docs/BAND.md) for implementation, configuration and validation. Live access must still be established. Do not expose credentials in chat, logs, reports, frontend code, or test containers.
+The sections below describe responsibilities. Consult [Similarweb setup](docs/SIMILARWEB.md), [BAND setup](docs/BAND.md), and [Neo4j setup](docs/NEO4J.md) for implementation, configuration and validation. Live access must be recorded separately from implementation checks. Do not expose credentials in chat, logs, reports, frontend code, or test containers.
 
 ### Neo4j — choose which deployments need rechecking
 
 - **Owner:** Person 2; Person 1 integrates the resulting selection view.
-- **Use only when:** multiple deployments share a contract or component. One application and a few fixed cases do not require a graph.
+- **Selected scope:** explicit deployment and contract relationships; activated by the user's September 29, 2026 implementation request.
 - **Input / mechanism:** store explicit deployment, revision, contract, case, and measured-run relationships using the Python driver and parameterized Cypher. A contract change returns affected deployment IDs and explaining paths.
 - **Output:** jobs marked `requires_reverification`. Graph traversal selects work; executed tests determine behavior.
 - **Access:** an available Neo4j database, URI, and credentials. Do not assume an Aura account or instance exists.
 - **Acceptance:** three synthetic deployments share two contracts; changing one selects exactly the two dependent deployments. Run a selected job through the core engine and prevent reuse of evidence for the old contract.
-- **Defer if:** the graph merely decorates a report or relationships cannot be established from explicit evidence.
+- **Boundary:** registration is explicit; there is no automatic infrastructure discovery or deployment trigger. Neo4j stays off until configured, fails visibly when unavailable, and never substitutes memory storage. The registered core fixture must match the selected source and target contract before dispatch. See [the setup and acceptance guide](docs/NEO4J.md).
 
 [Python driver](https://neo4j.com/docs/python-manual/current/query-simple/) · [Aura Free](https://neo4j.com/free-graph-database/)
 
@@ -98,12 +98,12 @@ The sections below describe intended responsibilities. Consult [Similarweb setup
 
 [Similarweb Websites Dataset](https://developers.similarweb.com/docs/websites-dataset) · [Similarweb MCP setup](https://docs.similarweb.com/api-v5/similarweb-mcp/mcp-setup)
 
-The MCP setup page, reviewed September 29, 2026, lists `https://mcp.similarweb.com` as the server endpoint. It requires a Similarweb login, a compatible MCP client and a subscription with API/MCP access (API-only, Business or Enterprise). MCP queries consume data credits; entitlement and event access have not been verified for this project. This reference does not change Similarweb's deferred status.
+The MCP setup page, reviewed September 29, 2026, lists `https://mcp.similarweb.com` as the server endpoint. It requires a Similarweb login, a compatible MCP client and a subscription with API/MCP access (API-only, Business or Enterprise). MCP queries consume data credits; entitlement and event access have not been verified for this project. This reference does not establish live Similarweb access.
 
 ## Three-person coordination and order
 
 1. Preserve the core verification behavior and its honest completion record.
-2. Implement the user-selected Similarweb and BAND additions; keep the other sponsors deferred.
+2. Implement the user-selected Similarweb, BAND and Neo4j additions; keep Plaud and Vultr deferred.
 3. Agree its versioned input/output contract, exact file ownership, and smallest acceptance check.
 4. Implement in the established branch/worktree arrangement; separate chats alone do not isolate edits.
 5. Integrate through Person 1, rerun relevant core checks, and record actual sponsor contribution.
@@ -118,11 +118,11 @@ Each handoff names the revision, changed paths, interface version, dependencies,
 
 Use the core ownership map in `INTEGRATION.md`. Preserve its `/v1/runs` API and `proofrun.v1` contract, including independent execution, finding, and repair states and revision/source/contract/candidate bindings. Optional work must not reinterpret a completed execution as a passing finding or accepted repair.
 
-## Deferred-work record
+## Selected and deferred work record
 
 | Sponsor | Initial status | Reason / activation evidence |
 |---|---|---|
-| Neo4j | DEFERRED | Core incomplete; multi-deployment selection need unverified |
+| Neo4j | LOCAL LIVE CHECK PASSED | Real Neo4j selected exactly two of three synthetic deployments; selected native Docker run executed 14 checks, retained four hash-checked artifacts and rejected old-contract reuse. See [integration evidence](INTEGRATION.md#neo4j-validation--september-29-2026). |
 | Plaud | DEFERRED | Core incomplete; usable recording and intake need unverified |
 | Vultr | DEFERRED | Core incomplete; portability/recovery need unverified |
 | BAND | LOCAL CHECKS PASS | Consequential room handoff implemented; live credentials and room evidence pending |

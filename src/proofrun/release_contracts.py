@@ -142,7 +142,7 @@ def validate_request(raw: dict, targets: dict) -> dict:
         raise ValueError("Repair must be enabled in the target's application path allowlist.")
     if "failure_research_id" in request and (not request["repair"]
             or not isinstance(request["failure_research_id"], str)
-            or not ID.fullmatch(request["failure_research_id"])):
+            or not re.fullmatch(r"failure-research-[a-f0-9]{64}", request["failure_research_id"])):
         raise ValueError("Selected failure research requires repair and a valid report id.")
     request.setdefault("benefit", "")
     if not isinstance(request["benefit"], str) or len(request["benefit"]) > 2000:

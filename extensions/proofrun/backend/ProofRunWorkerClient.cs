@@ -51,7 +51,7 @@ public sealed class ProofRunWorkerClient : IDisposable
         _http = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false })
         {
             BaseAddress = uri,
-            Timeout = TimeSpan.FromSeconds(30)
+            Timeout = Timeout.InfiniteTimeSpan
         };
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", workerToken);
     }
@@ -163,11 +163,11 @@ public sealed class ProofRunWorkerClient : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Post, $"v1/runs/{runId}/failure-research");
         request.Headers.Add("X-ProofRun-Scope", workspaceId);
         request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
-        var bytes = await SendAsync(request, MaxJsonBytes, ct);
+        var bytes = await SendAsync(request, MaxJsonBytes, ct, 70);
         try
         {
             var report = JsonNode.Parse(bytes)?.AsObject() ?? throw new JsonException();
-            return FailureResearchReport.Validate(report, "fixture", runId, "regression", workspaceId, query);
+            return FailureResearchReport.Validate(report, "fixture", runId, "regression", workspaceId, query, Text(body, "request_id"));
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
         { throw new ProofRunBridgeException("The worker returned invalid or differently bound failure research."); }
@@ -275,11 +275,13 @@ public sealed class ProofRunWorkerClient : IDisposable
         { throw new ProofRunBridgeException("The worker returned invalid JSON; no verification verdict was inferred."); }
     }
 
-    private async Task<byte[]> SendAsync(HttpRequestMessage request, int maxBytes, CancellationToken ct)
+    private async Task<byte[]> SendAsync(HttpRequestMessage request, int maxBytes, CancellationToken ct, int timeoutSeconds = 30)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
-            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             if (!response.IsSuccessStatusCode)
                 throw new ProofRunBridgeException(response.StatusCode switch
                 {
@@ -290,11 +292,11 @@ public sealed class ProofRunWorkerClient : IDisposable
                 });
             if (response.Content.Headers.ContentLength > maxBytes)
                 throw new ProofRunBridgeException("The worker response exceeded the bridge size limit.");
-            await using var input = await response.Content.ReadAsStreamAsync(ct);
+            await using var input = await response.Content.ReadAsStreamAsync(deadline.Token);
             using var output = new MemoryStream();
             var buffer = new byte[8192];
             int read;
-            while ((read = await input.ReadAsync(buffer, ct)) > 0)
+            while ((read = await input.ReadAsync(buffer, deadline.Token)) > 0)
             {
                 if (output.Length + read > maxBytes)
                     throw new ProofRunBridgeException("The worker response exceeded the bridge size limit.");

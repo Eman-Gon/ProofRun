@@ -11,6 +11,7 @@ from src.proofrun.release_service import ReleaseService
 
 BASELINE, CANDIDATE = "a" * 40, "b" * 40
 SCOPE = "workspace-a"
+RESEARCH_ID = "failure-research-" + "a" * 64
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def handoff(tmp_path):
                            "findings": [{"id": "finding-1", "status": "confirmed",
                                          "evidence": {"probe_hash": "d" * 64}}]}}
     service.records[original["id"]] = original
-    report = {"schema_version": "proofrun.failure-research.v1", "research_id": "research-release",
+    report = {"schema_version": "proofrun.failure-research.v1", "research_id": RESEARCH_ID,
               "status": "completed", "context": release_context(original, "finding-1", SCOPE),
               "summary": "An external report describes related behavior.",
               "sources": [{"id": "source-1", "title": "Upstream issue", "url": "https://github.com/example/catalog/issues/12"}],
@@ -45,7 +46,7 @@ def handoff(tmp_path):
 def submit(service, request, research=True):
     payload = {**request, "event_id": "new-investigation"}
     if research:
-        payload["failure_research_id"] = "research-release"
+        payload["failure_research_id"] = RESEARCH_ID
     return service.submit(payload, SCOPE)
 
 
@@ -121,3 +122,16 @@ def test_report_selection_requires_repair(handoff):
         submit(service, {**request, "repair": False})
     reports.get.assert_not_called()
     assert not calls
+
+
+@pytest.mark.parametrize("bad_id", ["research-release", "failure-research-" + "a" * 63, "failure-research-" + "a" * 65, "failure-research-" + "z" * 64])
+def test_research_id_requires_actual_report_shape(handoff, bad_id):
+    service, _, request, _, _, _ = handoff
+    with pytest.raises(ValueError):
+        validate_request({**request, "failure_research_id": bad_id}, service.targets)
+
+
+def test_actual_81_character_research_id_is_accepted(handoff):
+    service, _, request, _, _, _ = handoff
+    assert len(RESEARCH_ID) == 81
+    assert validate_request({**request, "failure_research_id": RESEARCH_ID}, service.targets)["failure_research_id"] == RESEARCH_ID
