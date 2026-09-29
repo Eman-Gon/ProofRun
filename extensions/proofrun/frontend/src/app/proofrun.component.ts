@@ -146,11 +146,18 @@ interface ResearchSession {
                   (repairRequested)="repairWithResearch($event)"></proofrun-failure-research>
               }
               @if (run.coordination?.provider === 'band') {
-                <div class="coordination">
+                <div class="coordination" [attr.aria-busy]="run.coordination?.status === 'waiting'">
                   <h3>BAND repair handoff</h3>
-                  <p>Mode: <strong>{{ run.coordination?.mode }}</strong> · Handoff: <strong>{{ label(run.coordination?.status || 'unreported') }}</strong></p>
+                  <p role="status" aria-live="polite"><span class="band-spinner" [hidden]="run.coordination?.status !== 'waiting'" aria-hidden="true"></span>{{ bandStatus(run) }}</p>
+                  <ol class="band-stages" aria-label="BAND handoff progress">
+                    @for (step of bandStages; track step.id) {
+                      <li [class.done]="run.coordination?.stages?.includes(step.id)" [class.current]="run.coordination?.status === 'waiting' && run.coordination?.stage === step.id">
+                        <span aria-hidden="true">{{ run.coordination?.stages?.includes(step.id) ? '✓' : '○' }}</span> {{ step.label }}
+                      </li>
+                    }
+                  </ol>
                   <p class="muted">The room carries the proposer/verifier handoff. Executed verification checks determine candidate acceptance.</p>
-                  <p class="muted">Room: <code>{{ run.coordination?.room_id || 'unreported' }}</code> · Handoff: <code>{{ run.coordination?.handoff_id || 'unreported' }}</code></p>
+                  <details><summary>Handoff receipt · {{ run.coordination?.mode }}</summary><pre>{{ run.coordination | json }}</pre></details>
                 </div>
               }
               <p class="muted">Stored worker snapshot, last observed {{ resource.result?.lastObservedAt | date:'medium' }}.
@@ -209,6 +216,28 @@ interface ResearchSession {
   `,
 })
 export class ProofRunComponent implements OnInit {
+  protected readonly bandStages = [
+    { id: 'waiting_for_verifier', label: 'Candidate sent' },
+    { id: 'candidate_received', label: 'Verifier received candidate' },
+    { id: 'sending_result', label: 'Verification finished' },
+    { id: 'completed', label: 'Result received' },
+  ];
+  protected bandStatus(run: RunSummary): string {
+    const handoff = run.coordination;
+    if (handoff?.status === 'passed') return 'BAND returned PASS · repair checks passed';
+    if (handoff?.status === 'blocked') return 'BAND returned BLOCKED · candidate did not pass';
+    if (handoff?.status === 'unavailable') return 'BAND handoff stopped · no repair accepted';
+    const labels: Record<string, string> = {
+      connecting: 'Connecting proposer and verifier to BAND…',
+      sending_candidate: 'Sending candidate via BAND…',
+      waiting_for_verifier: 'Waiting for the verifier to receive the candidate…',
+      candidate_received: 'Verifier received the candidate',
+      verifying: 'Running verification checks in Docker…',
+      sending_result: 'Sending the verification result via BAND…',
+      waiting_for_result: 'Waiting for the proposer to receive the result…',
+    };
+    return labels[handoff?.stage || ''] || 'Waiting for the BAND handoff…';
+  }
   private readonly service = inject(ProofRunService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);

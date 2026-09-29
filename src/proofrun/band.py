@@ -131,9 +131,9 @@ class BandHandoff:
         self._factory = transport_factory
         self.mode = "mock" if transport_factory is not None else "live"
 
-    def verify(self, spec, source, proposal, verifier, comparison):
+    def verify(self, spec, source, proposal, verifier, comparison, *, on_progress=None):
         try:
-            return asyncio.run(self._exchange(spec, source, proposal, verifier, comparison))
+            return asyncio.run(self._exchange(spec, source, proposal, verifier, comparison, on_progress))
         except Exception:
             # Provider exceptions may contain headers, keys or response bodies.
             raise BandUnavailable() from None
@@ -168,8 +168,17 @@ class BandHandoff:
             raise BandUnavailable()
         return request
 
-    async def _exchange(self, spec, source, proposal, verifier, comparison):
+    async def _exchange(self, spec, source, proposal, verifier, comparison, on_progress=None):
         request = self._request(spec, source, proposal, comparison)
+        progress = {"provider": "band", "mode": self.mode, "status": "waiting",
+                    "room_id": self.config.room_id, "handoff_id": request["handoff_id"],
+                    "proposer_agent_id": self.config.proposer_agent_id,
+                    "verifier_agent_id": self.config.verifier_agent_id, "stages": []}
+
+        def report(stage, **values):
+            progress.update(values, stage=stage, stages=[*progress["stages"], stage])
+            if on_progress is not None:
+                on_progress(dict(progress))
         if self._factory is None:
             from .band_sdk import SdkTransport
             factory = SdkTransport
@@ -194,10 +203,15 @@ class BandHandoff:
                 return message
 
         try:
+            report("connecting")
             await bounded(transport.open())
+            report("sending_candidate")
             request_id = await bounded(transport.send("proposer", _json(request)))
+            report("waiting_for_verifier", request_message_id=request_id)
             await receive("verifier", self.config.proposer_agent_id, request_id, request)
+            report("candidate_received")
             await bounded(transport.event("verifier", "Verification started", request["handoff_id"]))
+            report("verifying")
             # This is the only entry into the verifier in BAND mode. SDK receive
             # has authenticated the sender/room and matched the exact candidate.
             evidence = await bounded(asyncio.to_thread(verifier, spec, source, proposal))
@@ -236,12 +250,15 @@ class BandHandoff:
                                          "status": row.get("status")} for row in evidence.cases]}
             # Both sending and receipt must work. A disconnected room cannot
             # approve even a candidate whose local checks have already passed.
+            report("sending_result")
             result_id = await bounded(transport.send("verifier", _json(result)))
+            report("waiting_for_result", result_message_id=result_id)
             await bounded(transport.event("verifier", "Verification " + result["verdict"], request["handoff_id"]))
             await bounded(transport.mark("verifier", request_id, "processed"))
             await receive("proposer", self.config.verifier_agent_id, result_id, result)
             await bounded(transport.mark("proposer", result_id, "processed"))
-            receipt = {"provider": "band", "mode": self.mode,
+            receipt = {**progress, "stage": "completed", "stages": [*progress["stages"], "completed"],
+                       "provider": "band", "mode": self.mode,
                        "status": "passed" if passed else "blocked",
                        "room_id": self.config.room_id, "handoff_id": request["handoff_id"],
                        "proposer_agent_id": self.config.proposer_agent_id,

@@ -16,7 +16,7 @@ export interface RunSummary {
   bindings?: Record<string, unknown>;
   execution?: { target?: string; worker_id?: string; [key: string]: unknown };
   proposal?: { mode?: string; gateway?: string; model?: string; [key: string]: unknown };
-  coordination?: { provider: 'band'; mode: 'live' | 'mock'; status: string; room_id?: string; handoff_id?: string; [key: string]: unknown };
+  coordination?: { provider: 'band'; mode: 'live' | 'mock'; status: string; stage?: string; stages?: string[]; room_id?: string; handoff_id?: string; [key: string]: unknown };
   cases?: { id?: string; stage?: string; status?: string; [key: string]: unknown }[];
   environments?: Record<string, { observed_version?: string; [key: string]: unknown }>;
   artifacts?: { id: string; sha256: string; size_bytes: number }[];

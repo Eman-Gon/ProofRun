@@ -460,10 +460,12 @@ class RunService:
                     self._change(record, coordination={"provider": "band", "mode": handoff.mode,
                                                        "status": "waiting"})
                     try:
-                        verification, coordination = handoff.verify(spec, bundle, proposal, verify, comparison)
+                        verification, coordination = handoff.verify(
+                            spec, bundle, proposal, verify, comparison,
+                            on_progress=lambda value: self._change(record, coordination=value))
                     except BandUnavailable:
                         self._change(record, repair_status="unavailable",
-                                     coordination={"provider": "band", "mode": handoff.mode, "status": "unavailable"},
+                                     coordination={**record["coordination"], "status": "unavailable"},
                                      limitations=record["limitations"] + ["BAND handoff is unavailable or invalid; no repair was accepted."])
                         break
                 else:
