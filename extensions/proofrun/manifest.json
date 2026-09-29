@@ -2,10 +2,10 @@
   "manifestVersion": "1.0",
   "id": "proofrun.verification",
   "name": "ProofRun",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "sdkVersion": "REPLACED_BY_BUILD_FROM_sdk-version_ENDPOINT",
   "backend": {
-    "assemblyDir": "proofrun.verification/0.2.0/backend",
+    "assemblyDir": "proofrun.verification/0.2.1/backend",
     "entryAssembly": "Duplo.Extension.ProofRun.dll"
   },
   "resources": [{

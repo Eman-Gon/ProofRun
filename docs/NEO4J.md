@@ -277,3 +277,32 @@ The existing worker at `http://127.0.0.1:8766` has been restarted with these
 settings. Its authenticated selection endpoint successfully queried the Aura
 graph; health and registered-case checks also passed. Restart future workers
 by loading the main `.env`, which contains the worker and Neo4j settings.
+
+### Graphs on every fix
+
+The local dashboard at `http://127.0.0.1:8765` shows **Fix evidence graph**
+below each suggested fix. Saved source scans get a separate graph for each
+finding. The DuploCloud extension embeds the same evidence model in fixture
+results and each release finding. Select a node to see its recorded status,
+fingerprints and relationships; use **Refresh graph** to retry a connection.
+
+The workers expose authenticated `GET /v1/runs/{run_id}/graph` and
+`GET /v1/release-runs/{run_id}/graph`. DuploCloud applies the existing workspace
+and resource checks before proxying these routes. Release graph identities are
+scope bound. The dashboard uses its same-origin `/api/graph` endpoint and reads
+Neo4j settings from the main `.env`; browser responses never contain credentials.
+
+Graphs contain bounded projections of saved authoritative records, persisted
+as `ProofRunEvidenceGraph` and `ProofRunEvidenceNode` with `EVIDENCE_LINK`
+relationships. A response is ready only after Neo4j read-back matches the
+snapshot. Database outages show an unavailable state. In-progress runs show
+pending; static suggestions show unverified nodes with no execution claims.
+Graph relationships cannot approve a fix or replace verification evidence.
+
+Per-fix live Aura evidence and worker restart receipts are stored under
+`.commit-watch/neo4j/per-fix-graphs/`. The graph/API checks run with:
+
+```bash
+python -m pytest tests/test_evidence_graph.py tests/test_evidence_graph_api.py \
+  tests/test_dashboard.py tests/test_proofrun_api.py tests/test_release_api.py -q
+```

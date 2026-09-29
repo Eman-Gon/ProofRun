@@ -924,7 +924,7 @@ were not changed by this configuration consolidation.
 
 ## 11. Person 1 aggregate deployment — September 29, 2026
 
-The deployed extension is now **0.2.0**, built from the owners' stable release
+Person 1 recorded a complete deployment of **0.2.0**, built from the owners' stable release
 and failure-research handoffs against the running **SDK 1.0.6**. The complete
 official build and deployment passed; the running-host federation compatibility
 check also passed. Bundle SHA-256:
@@ -992,3 +992,39 @@ the separate release screen. The existing `proofrun.v1` handoff remains valid;
 the additional worker uses `proofrun.release.v1` and the workspace gateway
 documented in `docs/RELEASE-INVESTIGATION.md`. Person 3 still owns real Crusoe
 hosting/evidence; local success does not satisfy that gate.
+
+### Per-fix Neo4j graph handoff — extension 0.2.1
+
+The graph owner is preparing the 0.2.1 extension handoff with embedded evidence
+graphs in fixture results and each release finding. The local dashboard also
+shows a graph below each suggested fix, including separately labeled unverified
+graphs for static findings. The owner reports that node selection and keyboard
+interaction were visually checked in the local dashboard. Final refined-bundle
+deployment, portal rendering and restart receipts are pending this handoff;
+do not infer them from the implementation or worker results below.
+
+The additive graph interface is `proofrun.evidence-graph.v1`, with authenticated
+`GET /v1/runs/{run_id}/graph` and `GET /v1/release-runs/{run_id}/graph`. The
+DuploCloud proxy retains resource/workspace checks; release identities remain
+scope-bound. Core `proofrun.v1` and `proofrun.release.v1` verdicts are unchanged.
+Graphs project saved authoritative evidence into Neo4j and become `ready` only
+after the read-back matches the bound snapshot. Pending runs and unavailable
+databases cannot produce a verified graph; graph relationships do not approve
+repairs or turn static suggestions into execution evidence.
+
+Measured live Aura graph responses under `.commit-watch/neo4j/per-fix-graphs/`:
+
+- `fixture-graph.json`: `ready`, 45 nodes and 44 edges for
+  `run-43d73234d99e42f4bb19f5d6f5cd9c7b`.
+- `release-graph.json`: `ready`, 22 nodes and 23 edges for
+  `release-c3ad223367bc3fa77da9cdd5f79a7c65f4552d94`, preserving its actual
+  failed-agent / verified-candidate / skip evidence.
+- `restart.json`: fixture, release and dashboard workers loaded only the main
+  `.env` using the pinned Neo4j environment. The dashboard retained one history
+  entry and seven saved scans. The owner is performing a final refinement and
+  will provide the final restart state separately.
+
+No new paid model runs were used for these graph checks. Configuration, route
+behavior and targeted verification commands are documented in
+[`docs/NEO4J.md`](docs/NEO4J.md#graphs-on-every-fix). Preserve the existing
+credentials, source registries and evidence directories during deployment.

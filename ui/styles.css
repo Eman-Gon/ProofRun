@@ -285,3 +285,27 @@ pre { max-width: 100%; overflow: auto; white-space: pre; background: #f4f6f1; bo
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+
+.evidence-graph { margin: 18px 0; padding: 15px; border: 1px solid var(--line); border-radius: 9px; background: #fafcf7; }
+.graph-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.graph-heading h4 { margin: 0; font-size: 14px; }
+.graph-heading button { margin-left: auto; font-size: 12px; }
+.graph-provider { padding: 2px 7px; border-radius: 12px; background: #e6efe0; color: #42663b; font-size: 11px; }
+.graph-message { margin: 9px 0 12px; color: var(--muted); font-size: 12px; }
+.graph-scroll { max-width: 100%; max-height: 570px; overflow: auto; border: 1px solid #e5eade; border-radius: 7px; background: #fff; }
+.graph-scroll svg { display: block; width: 100%; min-width: 820px; }
+.graph-column { font-size: 10px; font-weight: 600; fill: #77806f; letter-spacing: 1px; }
+.graph-lines path { fill: none; stroke: #b1bfaa; stroke-width: 1.6px; }
+.graph-arrow { fill: #9bad91; }
+.graph-node { cursor: pointer; }
+.graph-node rect { fill: #f7f9f4; stroke: #ccd7c4; stroke-width: 1.2px; }
+.graph-node.good rect { fill: #edf6e9; stroke: #98bb88; }
+.graph-node.bad rect { fill: #fff3ee; stroke: #d8a186; }
+.graph-node:hover rect, .graph-node[aria-pressed="true"] rect, .graph-node:focus rect { stroke: #416b32; stroke-width: 2.5px; }
+.graph-node-label { font-size: 12px; fill: #2e412a; font-weight: 500; }
+.graph-node-status { font-size: 11px; fill: #667660; }
+.graph-details { margin-top: 10px; padding: 11px; border-radius: 6px; background: #f0f4ec; font-size: 12px; color: #52634c; overflow-wrap: anywhere; }
+.graph-details p { margin: 5px 0; }
+.graph-details ul { margin: 7px 0 0; padding-left: 18px; }
+.graph-fingerprint { font-family: ui-monospace, monospace; font-size: 11px; }
+@media (max-width: 600px) { .evidence-graph { padding: 10px; } .graph-heading { gap: 7px; } }

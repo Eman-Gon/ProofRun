@@ -74,6 +74,9 @@ def test_fixture_keeps_every_attempt_and_original_failure(fixture_run):
     result, store = ready("fixture", fixture_run)
     assert result["provider"] == "neo4j"
     assert result["schema_version"] == "proofrun.evidence-graph.v1"
+    run_node = next(n for n in result["nodes"] if n["kind"] == "run")
+    assert run_node["label"] == "Recorded run"
+    assert run_node["detail"] == "run_id: " + fixture_run["run_id"]
     repairs = [n for n in result["nodes"] if n["kind"] == "repair"]
     assert {n["label"]: n["status"] for n in repairs} == {"Repair attempt 1": "rejected", "Repair attempt 2": "verified"}
     assert all(n["finding_id"] == fixture_run["case_id"] for n in repairs)
@@ -87,6 +90,7 @@ def test_fixture_keeps_every_attempt_and_original_failure(fixture_run):
 def test_release_keeps_findings_repair_statuses_and_explicit_links(release_run):
     result, _ = ready("release", release_run)
     nodes = {n["id"]: n for n in result["nodes"]}
+    assert next(n for n in nodes.values() if n["kind"] == "run")["label"] == "Recorded run"
     assert len([n for n in nodes.values() if n["kind"] == "finding"]) == 2
     assert {n["status"] for n in nodes.values() if n["kind"] == "repair"} == {"rejected", "verification_stale"}
     assert len([n for n in nodes.values() if n["kind"] == "requirement"]) == 1
@@ -203,6 +207,7 @@ def test_dashboard_has_prepared_fix_and_recorded_checks_without_worker_acceptanc
                  "checks": [{"id": "probe", "before": {"status": "pass", "output": "PRIVATE-log"}, "after": {"status": "fail"}},
                             {"id": "fixed", "before": {"status": "pass"}, "after": {"status": "pass"}}]}}
     result, _ = ready("dashboard", record)
+    assert next(n for n in result["nodes"] if n["kind"] == "run")["label"] == "Saved comparison"
     repair = next(n for n in result["nodes"] if n["kind"] == "repair")
     assert repair["label"] == "Prepared fix" and repair["status"] == "prepared"
     assert all(n.get("status") != "verified" for n in result["nodes"])
@@ -240,10 +245,28 @@ def test_source_scan_graph_describes_unverified_suggestion_only():
                  "checks": [{"id": "forged-check", "before": {"status": "pass"}, "after": {"status": "pass"}}],
                  "patch_sha256": "b" * 64, "commit": "c" * 40}})
     assert next(n for n in result["nodes"] if n["kind"] == "finding")["status"] == "unverified"
+    root = next(n for n in result["nodes"] if n["kind"] == "run")
+    assert root["label"] == "Source scan" and root["status"] == "unverified"
     repair = next(n for n in result["nodes"] if n["kind"] == "repair")
     assert repair["label"] == "Suggested fix" and repair["status"] == "unverified"
     assert "suggested_snippets_sha256" in repair["detail"]
     assert not any(n["kind"] in {"verification", "test"} for n in result["nodes"])
+
+
+def test_prepared_suggestion_without_execution_has_an_explicit_unverified_graph():
+    result, _ = ready("dashboard", {"id": "dashboard-prepared-example", "status": "completed",
+        "report_sha256": "a" * 64, "case": {"id": "prepared-example", "kind": "prepared_suggestion",
+            "status": "confirmed_break", "patch_sha256": "b" * 64, "package": "pandas",
+            "fromVersion": "2.3.3", "toVersion": "3.0.0",
+            "checks": [{"id": "forged-check", "before": {"status": "pass"}, "after": {"status": "pass"}}]}})
+    root = next(n for n in result["nodes"] if n["kind"] == "run")
+    assert root["label"] == "Prepared suggestion" and root["status"] == "unverified"
+    repair = next(n for n in result["nodes"] if n["kind"] == "repair")
+    assert repair["label"] == "Prepared suggestion" and repair["status"] == "unverified"
+    assert any(n["label"] == "prepared-suggestion-input" for n in result["nodes"])
+    assert not any(n["kind"] in {"verification", "test"} for n in result["nodes"])
+    assert not any(e["label"] == "COMPARED_ENVIRONMENT" for e in result["edges"])
+    assert not any(n.get("status") in {"passed", "pass", "verified", "completed"} for n in result["nodes"])
 
 
 def test_failed_terminal_release_has_a_graph_without_invented_test_evidence():

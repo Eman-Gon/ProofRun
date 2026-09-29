@@ -74,6 +74,9 @@ def create_server(service, token, host="127.0.0.1", port=8767, *, failure_resear
             except Conflict as exc:
                 self.send_json(409, {"error": str(exc)})
 
+            except Exception:
+                self.send_json(503, {"error": "Saved evidence is temporarily unavailable."})
+
         def do_POST(self):
             scope = self.authorize()
             if scope is None:

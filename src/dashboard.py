@@ -25,6 +25,7 @@ from .public_repo import PublicRepoError, inspect_public_repo, list_public_repos
 from .result_explanation import explain_public_result
 from .demo_ready import load_demo_ready
 from .github_pr import PullRequestError, create_draft, eligible as pr_eligible
+from .public_pr import create_public_draft
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,11 +113,13 @@ class Dashboard:
         self.repository_scans = []
         self.repository_worker = None
         self.pull_requests = {}
+        self.public_pr_lock = threading.Lock()
         self.repository_owner = _repository_owner(self.root)
         self.graph_service = graph_service
         self.graph_lock = threading.RLock()
 
     def evidence_graph(self, case_id=None, *, scan_id=None, finding_index=None):
+        initial_signature = self._signature(case_id) if case_id in CASE_IDS else None
         current = self.state()
         if scan_id is not None:
             scans = current["repositoryScans"] + [entry["scan"] for entry in current["demoReady"] if entry.get("scan")]
@@ -165,6 +168,8 @@ class Dashboard:
                     report_hash = hashlib.sha256(path.read_bytes()).hexdigest()
             except OSError:
                 pass
+            if self._signature(case_id) != initial_signature:
+                report_hash = None
             # Only bounded measured fields are projected. Source snippets,
             # stdout, credentials and local paths never go to the graph store.
             fields = ("id", "repository", "title", "kind", "package", "fromVersion", "toVersion",
@@ -180,6 +185,12 @@ class Dashboard:
                       "case": safe_case, "fix_id": case_id}
             if case["status"] == "not_run":
                 record["status"] = "not_run"
+                if (path is None or not path.exists()) and case.get("beforeCode") and case.get("afterCode"):
+                    # A checked-in suggestion can have a graph before execution,
+                    # but it must carry no test results or comparison verdict.
+                    safe_case.update(kind="prepared_suggestion", status="unverified", checks=[],
+                                     patch_sha256=hashlib.sha256(json.dumps([case["beforeCode"], case["afterCode"]]).encode()).hexdigest())
+                    record.update(status="completed", report_sha256=hashlib.sha256(json.dumps(safe_case, sort_keys=True).encode()).hexdigest())
             return self.graph_service.snapshot("dashboard", record)
 
     def report_path(self, case_id):
@@ -275,6 +286,23 @@ class Dashboard:
         else:
             case["canRun"] = True
         return case
+
+    def create_public_pull_request(self, scan_id, finding_index):
+        with self.lock:
+            scan = next((item for item in self.repository_scans if item["id"] == scan_id), None)
+        if scan is None:
+            return 404, {"error": "Scan not found. Check this public repository again."}
+        if not self.public_pr_lock.acquire(blocking=False):
+            return 409, {"error": "A draft PR request is already in progress. Please wait."}
+        try:
+            result = create_public_draft(self.root, scan, finding_index)
+            with self.lock:
+                scan.setdefault("pullRequests", {})[str(finding_index)] = result
+            return 201, {"pullRequest": result}
+        except (PullRequestError, PublicRepoError) as exc:
+            return 409, {"error": str(exc)}
+        finally:
+            self.public_pr_lock.release()
 
     def create_pull_request(self, case_id):
         if case_id != "pydantic":
@@ -544,7 +572,9 @@ def make_server(root=ROOT, port=8765):
                     if set(payload) != {"repository"} or not isinstance(payload["repository"], str):
                         raise ValueError
                 elif self.path == "/api/pull-requests":
-                    if set(payload) != {"caseId"} or not isinstance(payload["caseId"], str):
+                    if not ((set(payload) == {"caseId"} and isinstance(payload["caseId"], str))
+                            or (set(payload) == {"scanId", "findingIndex"} and isinstance(payload["scanId"], str)
+                                and type(payload["findingIndex"]) is int and payload["findingIndex"] >= 0)):
                         raise ValueError
                 elif (set(payload) not in ({"caseId"}, {"caseId", "mode"})
                       or not isinstance(payload["caseId"], str) or not isinstance(payload.get("mode", "offline"), str)):
@@ -558,7 +588,10 @@ def make_server(root=ROOT, port=8765):
             if self.path == "/api/repositories":
                 code, body = dashboard.inspect_repository(payload["repository"])
             elif self.path == "/api/pull-requests":
-                code, body = dashboard.create_pull_request(payload["caseId"])
+                if "scanId" in payload:
+                    code, body = dashboard.create_public_pull_request(payload["scanId"], payload["findingIndex"])
+                else:
+                    code, body = dashboard.create_pull_request(payload["caseId"])
             else:
                 code, body = dashboard.start(payload["caseId"], payload.get("mode", "offline"))
             self._send(code, body)

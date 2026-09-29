@@ -165,3 +165,13 @@ GitHub `origin`. Before publishing, it rechecks the latest report hashes and the
 default-branch file contents against the exact tested source. The browser asks
 for confirmation, then creates a `codex/` branch containing only the verified
 application-file change. Stale or incomplete evidence cannot publish a PR.
+
+Public repository scans also show **Create draft PR** beside supported pandas
+hourly-frequency and Pydantic nullable-default suggestions. This works across
+public repositories, targeting the scanned repository and using a public fork
+when the signed-in GitHub CLI account lacks push permission. GitHub permissions
+and repository policies still apply. These drafts explicitly state that tests
+were not run; they are review proposals, not verified repairs. The source is
+rechecked at the scanned revision and the default branch must still match it.
+Retries reuse the proposal branch/PR. Findings without an automatic patch show
+an explanation, and saved examples require a fresh scan before publication.

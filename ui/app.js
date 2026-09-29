@@ -297,6 +297,24 @@ function renderRepository() {
       diff.append(line);
     }
     article.append(diff, node('p', 'fix-note', 'Suggested change; not applied or tested.'));
+    const proposal = scan.pullRequests?.[findingIndex];
+    const currentScan = state.repositoryScans.some((item) => item.id === scan.id);
+    const canPropose = ['pandas-hour', 'pydantic-optional'].includes((finding.id || '').split(':')[0])
+      && finding.beforeCode && finding.afterCode && finding.beforeCode.length < 1000 && finding.afterCode.length < 1000;
+    if (proposal) {
+      const link = node('a', 'button secondary compact', `View PR #${proposal.number} ↗`);
+      setLink(link, proposal.url);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      article.append(link);
+    } else {
+      const button = node('button', 'button primary compact', submittingPr ? 'Creating draft PR…' : 'Create draft PR');
+      button.disabled = !canPropose || !currentScan || submittingPr || !connected;
+      button.addEventListener('click', () => createPublicPullRequest(scan, findingIndex));
+      article.append(button, node('p', 'fix-note', !currentScan ? 'Check this public repository above to prepare a current PR suggestion.' : canPropose
+        ? 'Opens an unverified suggestion in this repository. Uses a public fork if needed. GitHub CLI sign-in required.'
+        : 'No automatic patch is available for this finding; review the migration manually.'));
+    }
     const source = node('a', 'finding-source', 'Upstream documentation ↗');
     source.target = '_blank';
     source.rel = 'noopener noreferrer';
@@ -733,6 +751,29 @@ async function startRun() {
     await refresh();
   } catch (error) { toast(error.message, true); }
   finally { submitting = false; updateRunPanel(); }
+}
+
+async function createPublicPullRequest(scan, findingIndex) {
+  if (submittingPr || !window.confirm(`Create a draft PR in ${scan.result.repository} for this suggested change? Tests have not been run. A public fork will be created if needed.`)) return;
+  submittingPr = true;
+  lastScanSignature = '';
+  renderRepository();
+  try {
+    const { response, result } = await requestJson('/api/pull-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrfToken },
+      body: JSON.stringify({ scanId: scan.id, findingIndex }),
+    }, 300000);
+    if (!response.ok) throw new Error(result.error || 'Unable to create the draft PR.');
+    scan.pullRequests = { ...scan.pullRequests, [findingIndex]: result.pullRequest };
+    toast(`Draft PR #${result.pullRequest.number} is ready for review.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    submittingPr = false;
+    lastScanSignature = '';
+    renderRepository();
+  }
 }
 
 async function createDraftPullRequest() {

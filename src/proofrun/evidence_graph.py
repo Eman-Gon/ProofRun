@@ -248,10 +248,12 @@ def _release(run, graph, root):
 def _dashboard(run, graph, root):
     case = _mapping(run.get("case"))
     source_scan = case.get("kind") == "source_scan"
+    prepared_suggestion = case.get("kind") == "prepared_suggestion"
+    static_suggestion = source_scan or prepared_suggestion
     finding_id = _identifier(case.get("id"))
     if not finding_id:
         raise ValueError("Missing dashboard case identity")
-    finding = graph.node("finding", "finding", finding_id, status="unverified" if source_scan else case.get("status"),
+    finding = graph.node("finding", "finding", finding_id, status="unverified" if static_suggestion else case.get("status"),
                          finding_id=finding_id)
     graph.link(root, finding, "RECORDED_FINDING")
     package = _identifier(case.get("package"))
@@ -259,21 +261,22 @@ def _dashboard(run, graph, root):
         version = _identifier(case.get(version_key))
         if package and version:
             node = graph.node("package:" + role, "environment", package + " " + version,
-                              detail="Recorded " + role + " environment")
-            graph.link(root, node, "COMPARED_ENVIRONMENT")
+                              detail=("Referenced " if static_suggestion else "Recorded ") + role + " environment")
+            graph.link(root, node, "REFERENCED_ENVIRONMENT" if static_suggestion else "COMPARED_ENVIRONMENT")
     revision = case.get("commit")
     if isinstance(revision, str) and _REVISION.fullmatch(revision):
         node = graph.node("revision", "revision", "Recorded repository revision", detail="revision: " + revision)
         graph.link(root, node, "SOURCE_REVISION")
     patch = None
     if _hash(case.get("patch_sha256")):
-        patch = graph.node("prepared-fix", "repair", "Suggested fix" if source_scan else "Prepared fix",
-                           status="unverified" if source_scan else "prepared", finding_id=finding_id,
-                           detail=("suggested_snippets_sha256: " if source_scan else "patch_sha256: ")
-                           + case["patch_sha256"] + ("; Static suggestion; no execution evidence." if source_scan
+        label = "Prepared suggestion" if prepared_suggestion else "Suggested fix" if source_scan else "Prepared fix"
+        patch = graph.node("prepared-fix", "repair", label,
+                           status="unverified" if static_suggestion else "prepared", finding_id=finding_id,
+                           detail=("suggested_snippets_sha256: " if static_suggestion else "patch_sha256: ")
+                           + case["patch_sha256"] + ("; Static suggestion; no execution evidence." if static_suggestion
                                                      else "; Stored comparison checks only."))
-        graph.link(finding, patch, "SUGGESTED_FIX" if source_scan else "PREPARED_FIX")
-    for index, check in enumerate([] if source_scan else _rows(case.get("checks"))):
+        graph.link(finding, patch, "SUGGESTED_FIX" if static_suggestion else "PREPARED_FIX")
+    for index, check in enumerate([] if static_suggestion else _rows(case.get("checks"))):
         check = _mapping(check)
         identifier = _identifier(check.get("id"))
         if not identifier:
@@ -285,7 +288,8 @@ def _dashboard(run, graph, root):
             node = graph.node("check:" + str(index) + ":" + role, "test", identifier + ": " + role,
                               status=observation.get("status"), finding_id=finding_id, required=False)
             graph.link(patch if identifier == "fixed" and patch else finding, node, "RECORDED_CHECK")
-    _artifact_nodes(graph, root, [{"id": "source-scan-report" if source_scan else "comparison-report",
+    artifact_id = "prepared-suggestion-input" if prepared_suggestion else "source-scan-report" if source_scan else "comparison-report"
+    _artifact_nodes(graph, root, [{"id": artifact_id,
                                  "sha256": run["report_sha256"]}])
 
 
@@ -297,16 +301,14 @@ _WRITE = """
 MERGE (g:ProofRunEvidenceGraph {graph_id: $graph_id})
 ON CREATE SET g += $metadata
 WITH g WHERE g.scope_hash = $scope_hash AND g.fingerprint = $fingerprint
-CALL {
-  WITH g
+CALL (g) {
   UNWIND $nodes AS row
   MERGE (n:ProofRunEvidenceNode {node_key: row.node_key})
   ON CREATE SET n += row.properties
   MERGE (g)-[:HAS_EVIDENCE]->(n)
   RETURN count(*) AS node_count
 }
-CALL {
-  WITH g
+CALL (g) {
   UNWIND $edges AS row
   MATCH (g)-[:HAS_EVIDENCE]->(s:ProofRunEvidenceNode {node_key: row.source_key})
   MATCH (g)-[:HAS_EVIDENCE]->(t:ProofRunEvidenceNode {node_key: row.target_key})
@@ -318,14 +320,12 @@ RETURN g.graph_id AS graph_id, node_count, edge_count
 """
 _READ = """
 MATCH (g:ProofRunEvidenceGraph {graph_id: $graph_id, scope_hash: $scope_hash})
-CALL {
-  WITH g
+CALL (g) {
   MATCH (g)-[:HAS_EVIDENCE]->(n:ProofRunEvidenceNode)
   WITH n ORDER BY n.id
   RETURN collect(properties(n)) AS nodes
 }
-CALL {
-  WITH g
+CALL (g) {
   MATCH (g)-[:HAS_EVIDENCE]->(s:ProofRunEvidenceNode)-[e:EVIDENCE_LINK]->(t:ProofRunEvidenceNode)<-[:HAS_EVIDENCE]-(g)
   WITH e ORDER BY e.id
   RETURN collect(properties(e)) AS edges
@@ -392,7 +392,12 @@ class RunGraphService:
                 return result
             try:
                 graph = _Projection()
-                root = graph.node("run", "run", ("Comparison " if kind == "dashboard" else "Run ") + run_id, status=status)
+                dashboard_kind = _mapping(run.get("case")).get("kind") if kind == "dashboard" else None
+                static_labels = {"source_scan": "Source scan", "prepared_suggestion": "Prepared suggestion"}
+                label = static_labels.get(dashboard_kind, "Saved comparison" if kind == "dashboard" else "Recorded run")
+                root = graph.node("run", "run", label,
+                                  status="unverified" if dashboard_kind in static_labels else status,
+                                  detail="run_id: " + run_id)
                 {"fixture": _fixture, "release": _release, "dashboard": _dashboard}[kind](run, graph, root)
                 nodes, edges = graph.lists()
                 scope_hash = _digest(scope)
