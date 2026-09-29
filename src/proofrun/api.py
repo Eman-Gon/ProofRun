@@ -20,6 +20,7 @@ from .contracts import SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from .service import RunService
+    from .research import ResearchService
 
 MAX_BODY_BYTES = 65_536
 REQUEST_TIMEOUT_SECONDS = 10
@@ -57,6 +58,7 @@ class _Server(ThreadingHTTPServer):
 
 def create_server(
     service: RunService, token: str, host: str = "127.0.0.1", port: int = 8766,
+    *, research: ResearchService | None = None,
 ) -> ThreadingHTTPServer:
     """Construct a server; the caller owns serve/shutdown and service.close()."""
     if (not isinstance(token, str) or not 1 <= len(token) <= 512
@@ -151,6 +153,13 @@ def create_server(
             if self.command == "POST" and self.path == "/v1/runs":
                 run, created = service.submit(self._body())
                 self._json(202 if created else 200, run)
+            elif self.command == "POST" and self.path == "/v1/customer-research":
+                payload = self._body()
+                if research is None:
+                    raise _HTTPError(503, "research_unavailable", "Customer research is not configured on this worker.")
+                # Research has its own record and explicit request identity. It
+                # cannot modify a run, proposal, test contract, or verdict.
+                self._json(200, research.submit(payload))
             elif self.command == "GET" and (match := _CASE_PATH.fullmatch(self.path)):
                 self._json(200, service.get_case(match.group(1)))
             elif self.command == "GET" and (match := _RUN_PATH.fullmatch(self.path)):
@@ -174,7 +183,8 @@ def create_server(
                 # Import lazily so transport-only tooling does not initialize a
                 # runner, configuration, or provider client.
                 from .service import ServiceError
-                if isinstance(exc, ServiceError):
+                from .research import ResearchError
+                if isinstance(exc, (ServiceError, ResearchError)):
                     self._error(exc.status, exc.code, exc.message)
                 else:
                     self._error(500, "internal_error", "The worker could not complete this request.")
@@ -200,11 +210,13 @@ def main(argv: list[str] | None = None) -> int:
         config = WorkerConfig.from_env()
     except ConfigurationError as exc:
         parser.error(str(exc))
-    service = server = None
+    service = server = research = None
     try:
+        from .research import ResearchService
+        research = ResearchService(config.artifact_dir / "customer-research")
         service = RunService(args.root.resolve(), config.artifact_dir, execution_target=config.execution_target,
                              worker_id=config.worker_id, runner_mode=args.runner)
-        server = create_server(service, config.token, args.host, args.port)
+        server = create_server(service, config.token, args.host, args.port, research=research)
         print(f"ProofRun worker listening on {args.host}:{server.server_port} ({args.runner} runner).", flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
@@ -217,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
             server.server_close()
         if service is not None:
             service.close()
+        if research is not None:
+            research.close()
     return 0
 
 

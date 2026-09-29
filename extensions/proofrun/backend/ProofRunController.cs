@@ -36,4 +36,17 @@ public class ProofRunController : ResourcesController<ProofRunVerification, Proo
         catch (FileNotFoundException) { return NotFound(); }
         catch (ProofRunBridgeException ex) { return StatusCode(502, new { errors = ex.Message }); }
     }
+
+    // The inherited resource filter authorizes this existing resource. A research request never updates a verdict.
+    [HttpPost("{id}/research")]
+    public async Task<IActionResult> Research(string workspaceId, string id,
+        [FromBody] ProofRunResearchRequest request, CancellationToken ct)
+    {
+        var entity = await ResourceServiceFacet.GetByIdAsync(id, ct);
+        if (entity is null || !string.Equals(entity.OwnerWorkspaceId, workspaceId, StringComparison.Ordinal))
+            return NotFound();
+        try { return Ok(new { data = await _service.FetchResearchAsync(entity, request, ct) }); }
+        catch (ArgumentException ex) { return BadRequest(new { errors = ex.Message }); }
+        catch (ProofRunBridgeException ex) { return StatusCode(502, new { errors = ex.Message }); }
+    }
 }

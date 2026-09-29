@@ -1,8 +1,10 @@
-# ProofRun: optional sponsors after the core build
+# ProofRun: selected additions and deferred sponsors
 
-Status: **DEFERRED — core completion has not been demonstrated.**
+Status: **SIMILARWEB + BAND IMPLEMENTED LOCALLY — live integration unverified.**
 
-This document is a dormant plan, not evidence of implementation. Do not install, configure, provision, purchase, or integrate optional sponsors until every core gate below passes. Follow `CLAUDE.md` and `INTEGRATION.md` for the active build. Documentation and saved reports do not establish a live integration.
+On September 29, 2026, the user explicitly selected **Similarweb + BAND** for implementation now. This supersedes the earlier core-first deferral and one-at-a-time restriction for these two additions. Neo4j, Plaud and Vultr remain deferred. Follow `CLAUDE.md` and `INTEGRATION.md` for the core build; its incomplete gates remain incomplete. Documentation, unit tests and saved reports do not establish a live sponsor integration.
+
+Similarweb supplies dated website context for the FDE's meeting brief. BAND carries the exact repair candidate to the trusted verifier and returns the consequential verdict. Customer research cannot modify the test contract or repair status. Enabling BAND requires a completed room handoff; transport failure cannot fall back to direct verification.
 
 ## Core architecture and completion gate
 
@@ -14,7 +16,7 @@ The core is DuploCloud + Crusoe + OpenRouter:
 
 Crusoe's required role in this architecture is worker hosting. Routing inference to Crusoe through OpenRouter is not required by this plan. The first supported behavior check is a bounded Python/Pydantic case with trusted acceptance tests; it is not arbitrary repository repair.
 
-Person 1 assembles the completion record; Person 2 supplies verification evidence; Person 3 supplies worker and model evidence. Every unchecked item keeps Phase 2 deferred.
+Person 1 assembles the completion record; Person 2 supplies verification evidence; Person 3 supplies worker and model evidence. These gates still determine core completion. The user's selected additions can be implemented alongside this work.
 
 - [ ] A real job starts in DuploCloud, reaches the worker, and returns its result to the extension UI.
 - [ ] The job executes on the Crusoe CPU VM. Record worker identity and execution artifacts; local execution and replayed results do not satisfy this check.
@@ -33,11 +35,11 @@ Person 1 assembles the completion record; Person 2 supplies verification evidenc
 | Integration owner | Person 1 |
 | Gate status | DEFERRED |
 
-After every check passes, Person 1 records `CORE_COMPLETE` with evidence and selects **at most one** optional integration for the next increment. This checkpoint introduces no additional user-approval requirement. Finish and verify that increment before selecting another. A weak use case is a valid reason to leave a sponsor deferred.
+After every core check passes, record `CORE_COMPLETE` with evidence. The selected scope is exactly Similarweb and BAND. No additional optional integration should be activated as part of this increment.
 
 ## Optional integrations
 
-These are proposed uses of documented capabilities, not tested ProofRun integrations. Confirm access and current APIs when an option becomes active. Do not expose credentials in chat, logs, reports, frontend code, or test containers.
+The sections below describe intended responsibilities. Consult [Similarweb setup](docs/SIMILARWEB.md) and [BAND setup](docs/BAND.md) for implementation, configuration and validation. Live access must still be established. Do not expose credentials in chat, logs, reports, frontend code, or test containers.
 
 ### Neo4j — choose which deployments need rechecking
 
@@ -86,13 +88,13 @@ These are proposed uses of documented capabilities, not tested ProofRun integrat
 
 [BAND hacker guide](https://www.band.ai/hacker-guide) · [SDK documentation](https://docs.band.ai/integrations/sdks/overview)
 
-### Similarweb — investigate relevance before implementation
+### Similarweb — customer research in the meeting brief
 
-- **Evaluation owner:** Person 1; no implementation owner assigned.
-- **Possible separate use:** account or market research before an FDE meeting, if a user needs it alongside the verification briefing.
-- **First task:** identify a concrete user decision improved by website/market intelligence and verify the required API entitlement. Do not assume a key, paid plan, or event access.
-- **If justified:** show returned metrics, dates, and provenance in a separate market-context section. Traffic estimates are never compatibility, correctness, or repair evidence.
-- **Acceptance:** demonstrate the stated user decision and trace it to an actual response. Otherwise leave this option deferred.
+- **Owner:** integration work selected by the user on September 29, 2026.
+- **Use:** prepare questions about the customer's operating scale before the meeting. Website traffic provides context; actual import/API volume must be confirmed with the customer.
+- **Mechanism:** the FDE supplies a domain and completed month and explicitly requests research. A server-side Similarweb call returns estimated worldwide website visits with period, source and retrieval time. The result appears in customer context and the downloadable meeting brief.
+- **Boundary:** research has separate records and request identities. It does not change a source snapshot, approved requirement, executed check, or repair verdict. Repeating the same request identity reuses its stored result rather than spending credits again.
+- **Acceptance:** a real authorized API response for the chosen customer domain appears in the brief with its date/provenance; missing access and missing data remain visible. Tests with stubbed transport are local implementation checks only.
 
 [Similarweb Websites Dataset](https://developers.similarweb.com/docs/websites-dataset) · [Similarweb MCP setup](https://docs.similarweb.com/api-v5/similarweb-mcp/mcp-setup)
 
@@ -100,8 +102,8 @@ The MCP setup page, reviewed September 29, 2026, lists `https://mcp.similarweb.c
 
 ## Three-person coordination and order
 
-1. Complete and record the core gate; preserve a runnable demo revision.
-2. Select one optional integration with a concrete contribution and available prerequisites.
+1. Preserve the core verification behavior and its honest completion record.
+2. Implement the user-selected Similarweb and BAND additions; keep the other sponsors deferred.
 3. Agree its versioned input/output contract, exact file ownership, and smallest acceptance check.
 4. Implement in the established branch/worktree arrangement; separate chats alone do not isolate edits.
 5. Integrate through Person 1, rerun relevant core checks, and record actual sponsor contribution.
@@ -123,7 +125,7 @@ Use the core ownership map in `INTEGRATION.md`. Preserve its `/v1/runs` API and 
 | Neo4j | DEFERRED | Core incomplete; multi-deployment selection need unverified |
 | Plaud | DEFERRED | Core incomplete; usable recording and intake need unverified |
 | Vultr | DEFERRED | Core incomplete; portability/recovery need unverified |
-| BAND | DEFERRED | Core incomplete; independent room handoff unimplemented |
-| Similarweb | DEFERRED | No demonstrated decision within the verification workflow |
+| BAND | LOCAL CHECKS PASS | Consequential room handoff implemented; live credentials and room evidence pending |
+| Similarweb | LOCAL CHECKS PASS | Customer context adapter and brief UI implemented; authorized API access/domain/evidence pending |
 
 Update the record with evidence rather than assuming activation. A connected account, logo, unexecuted path, or historical report does not establish a meaningful integration. Technical success does not guarantee prize eligibility; verify current [event rules](https://hackersquad.io/events/cmq5jhvv400j4p20koptqeyoa) before making eligibility claims.

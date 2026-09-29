@@ -30,9 +30,36 @@ docker compose -f docker-compose.yml \
 
 Use authenticated HTTPS for a remote/Crusoe worker. A remote URL or `target=crusoe` label alone is not evidence of execution on Crusoe.
 
+## Selected optional integrations
+
+**Similarweb:** Select a verification, enter the customer's website domain and a completed month, then press **Fetch customer context**. The authenticated portal route `POST {id}/research` checks the resource's workspace and calls the fixed worker endpoint `POST /v1/customer-research`. The backend derives `request_id` from the workspace, resource and browser nonce, validates the returned identity/domain/period, and returns only allowed metrics, dates, sources and availability details. Similarweb's API key belongs only in the Python worker's `SIMILARWEB_API_KEY` setting.
+
+Each explicit fetch covers one month of estimated worldwide desktop/mobile visits. A transport retry reuses its nonce; polling or refreshing verification never fetches research. The page clearly distinguishes completed research, missing provider data and unavailable access. Research is kept in the current page session under the workspace/resource identity and included in **Download meeting brief**. Reloading the page clears that UI context; it does not fetch paid data automatically. Research never changes test requirements, execution, findings or repair acceptance.
+
+**BAND:** When the worker enables BAND, run details and the meeting brief show its actual mode, handoff status, room and handoff identity. `waiting`, `passed`, `blocked` and `unavailable` are coordination states; `passed` describes the delivered verifier handoff and does not independently establish an accepted repair. The separately reported repair verdict remains authoritative. Mock coordination stays labeled `mock`. Room IDs are displayed as text; the extension does not invent room links or expose agent API keys.
+
+The September 29 optional-integration extension checks passed **20 frontend tests**, **53 standalone .NET HTTP-client assertions** with fake transport, and the Angular production build in the existing Node 22 Docker image. They do not establish a live Similarweb lookup, BAND room delivery, or portal deployment. The SDK-specific controller/service still requires the real host build.
+
+Run the frontend behavior checks with Node 22.22.3+ or Node 24:
+
+```bash
+cd extensions/proofrun/frontend
+node --experimental-strip-types --test tests/*.test.mjs
+```
+
 ## Build and deploy
 
 Keep the official DevKit at `../proofrun-duplocloud-devkit`, or set `PROOFRUN_DEVKIT_DIR` to it. This repository's source remains under `extensions/proofrun/`; do not run the DevKit adoption script over ProofRun.
+
+For a **manual licensed portal setup** while model access is pending, start the official core portal/studio services with their real license and private authentication settings first. Once `/healthz` is ready, the local helper follows the official `run.sh` login/token/workspace/access API sequence:
+
+```bash
+python3 extensions/proofrun/scripts/bootstrap-portal.py
+# Optional when the DevKit is elsewhere:
+python3 extensions/proofrun/scripts/bootstrap-portal.py --devkit-dir /absolute/path/to/devkit
+```
+
+It reads the existing sibling `.env`, reuses a valid admin token or creates `dev-kit-admin`, and creates/adopts `extension-dev`, its permission set and the current local user's permission group. It never revokes existing tokens, overwrites a conflicting access grant, prints credentials, starts containers, or changes license/model settings. Returned token and IDs are saved atomically into the same ignored `.env` with mode `0600`, preserving unrelated settings. This is partial manual portal setup; it does not claim a working model/agent or successful completion of the full DevKit setup. The helper has passed 12 assertions against an isolated fake API, covering repeated runs, secret-safe errors, redirects, token preservation and private configuration writes; an actual portal invocation must be recorded separately.
 
 ```bash
 # From the ProofRun root; requires Docker and a running, authenticated DevKit SDK feed.

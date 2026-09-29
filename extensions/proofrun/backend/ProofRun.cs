@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Text.Json.Nodes;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace Duplo.Extension.ProofRun;
@@ -71,5 +72,12 @@ public class ProofRunService : ResourceServiceBase<ProofRunVerification, ProofRu
         var run = await client.GetRunAsync(runId, ct);
         ProofRunWorkerClient.RequireJobKey(run, ProofRunWorkerClient.JobKey(entity.OwnerWorkspaceId ?? "", entity.Id));
         return await client.GetArtifactAsync(run, artifactId, ct);
+    }
+
+    public async Task<JsonObject> FetchResearchAsync(ProofRunVerification entity, ProofRunResearchRequest request,
+        CancellationToken ct)
+    {
+        using var client = ProofRunWorkerClient.FromConfiguration(_config);
+        return await client.ResearchAsync(entity.OwnerWorkspaceId ?? "", entity.Id, request, ct);
     }
 }

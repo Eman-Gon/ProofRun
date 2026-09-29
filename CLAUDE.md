@@ -4,7 +4,7 @@ Repository: <https://github.com/Eman-Gon/ProofRun>
 
 Documentation baseline: September 29, 2026, inspected commit `7118d720ea2ae3e9bc3a2a4f7f61540348086451`. Reinspect the current checkout when starting work; this is a planning snapshot, not a claim that the proposed implementation exists.
 
-Read [INTEGRATION.md](INTEGRATION.md) for contracts, setup, milestones and the three copy-ready chat prompts. [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md) stays deferred until the core gate passes.
+Read [INTEGRATION.md](INTEGRATION.md) for contracts, setup, milestones and the three copy-ready chat prompts. The user selected **Similarweb + BAND** for implementation now on September 29, 2026, superseding their previous optional deferral. [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md) records this scope; Neo4j, Plaud and Vultr remain deferred.
 
 ## Product and first user
 
@@ -46,7 +46,7 @@ First milestone: **DuploCloud action → existing runner → real measured resul
 
 Begin with one registered case and a single worker. Defer arbitrary repository execution, production changes, automatic merging, general incident diagnosis, multiple languages, new memory infrastructure and automatic deployment triggers. Draft PR publication follows evidence export. Preserve the existing dashboard and CLI unless their behavior needs to change for the requested work.
 
-BAND is optional after the core works. Its room must deliver the actual proposer/verifier handoff, and rejection must block acceptance. Neo4j, Plaud, Vultr and Similarweb follow the deferred plan; sponsor count alone does not justify an integration.
+BAND and Similarweb are the two selected additions. BAND's room must deliver the actual proposer/verifier handoff, and rejection must block acceptance. Similarweb supplies separate dated customer-research context for the meeting brief and cannot influence verification verdicts. Neo4j, Plaud and Vultr remain deferred.
 
 ## Evidence and execution rules
 
@@ -111,4 +111,4 @@ Select checks for the changed area. The full suite also includes earlier workflo
 
 Use the evidence gate in `INTEGRATION.md`: actual DuploCloud initiation/results, Crusoe execution, OpenRouter-generated proposal, reproduced regression, original-suite preservation, bad-fix rejection, exact evidence binding and a repeatable integrated demo.
 
-**Current status: IN PROGRESS.** Person 1's authenticated worker and shared `proofrun.v1` types are implemented. Person 2's native verifier has fresh local Docker evidence, including prepared narrow-fix acceptance and permissive-fix rejection. Person 3's repair/deployment code is integrated locally; actual OpenRouter and Crusoe access remain unavailable. DuploCloud extension source is present, but portal setup/deployment is incomplete. See the current handoff and measured checks in sections 7–8 of `INTEGRATION.md`. Optional work remains deferred.
+**Current status: IN PROGRESS.** Person 1's authenticated worker and shared `proofrun.v1` types are implemented. Person 2's native verifier has fresh local Docker evidence, including prepared narrow-fix acceptance and permissive-fix rejection. Person 3's repair/deployment code is integrated locally; OpenRouter credentials now authenticate, but a generated proposal is pending and Crusoe access remains unavailable. DuploCloud email/license setup has progressed to the local sign-in page; Mongo startup, SDK build and portal deployment remain incomplete. See the current handoff and measured checks in sections 7–8 of `INTEGRATION.md`. Similarweb and BAND are selected for implementation; the remaining optional sponsors stay deferred. Live contribution by either selected addition still requires provider evidence.

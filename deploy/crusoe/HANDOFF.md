@@ -2,6 +2,16 @@
 
 Owner: Person 3. Shared checkout `/Users/emanschool/ProofRun`, branch `main`, base revision `f9112a2c947223a95c9467131294e318b0ced3df`. All implementation changes remain uncommitted. No commit, push, production change or VM provisioning was performed. Person 1/2 changes and existing guide edits were preserved.
 
+## Update: configured-model parameter compatibility
+
+September 29, 2026, follow-up at base revision `41fd0b622ae3e54adb7b6304952afc1cd7ad7618` (changes below uncommitted). This update supersedes the earlier missing-key/model inventory: Person 1 reports that the privately configured OpenRouter key authenticates with HTTP 200 and the explicit model is `anthropic/claude-sonnet-5`. Person 3 did not read or expose that credential.
+
+Person 1's live endpoint-catalog inspection reported that all ten endpoints for the selected model omit temperature support. The client had always sent `temperature: 0` while requiring support for all request parameters. [OpenRouter parameter documentation](https://openrouter.ai/docs/api_reference/parameters) identifies temperature as optional and says omitted sampling parameters use provider defaults. [Provider routing documentation](https://openrouter.ai/docs/guides/routing/provider-selection#requiring-providers-to-support-all-parameters) says `require_parameters: true` excludes endpoints that do not support a supplied parameter.
+
+The client now omits the optional temperature parameter. It retains the exact configured model, disables fallbacks, requires support for the remaining parameters, and retains strict JSON schema, output/time/attempt bounds, provenance and independent verification. No acceptance criteria or verifier files changed. The regression test simulates the selected model's endpoint rejecting temperature and checks the supported request, unchanged model and retained controls.
+
+The prior native run `run-ed679005e3314d069ec86169b3323ddc` reproduced the regression but reported repair unavailable. Its historical provider error body/status was not retained; parameter incompatibility is a supported diagnosis, not a claim that a specific HTTP error was observed. Owned suite: **40 tests passed** using `python3.12 -m pytest tests/test_proofrun_repair.py -q --disable-warnings`. Log: `.commit-watch/person3/repair-temperature-tests.txt`; source-bound receipt: `.commit-watch/person3/temperature-compatibility.json`. No live proposal or worker restart was performed by Person 3 for this fix. Person 1 owns restarting the worker and running the actual integration after the stable handoff.
+
 ## Delivered interface and files
 
 Uses Person 1's existing `proofrun.v1` types in `src/proofrun/contracts.py` and Person 2's native `run_comparison` / `verify_candidate`. No competing contract or verifier was created.

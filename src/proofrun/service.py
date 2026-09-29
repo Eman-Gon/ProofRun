@@ -63,7 +63,7 @@ class ServiceError(ValueError):
 class RunService:
     def __init__(self, root: Path, artifact_dir: Path, execution_target="local",
                  worker_id=None, runner_mode="native", compare=None, verify=None,
-                 propose=None):
+                 propose=None, band_handoff=None):
         self.root = Path(root).resolve()
         self.artifact_dir = Path(artifact_dir).resolve()
         self.artifact_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -73,9 +73,10 @@ class RunService:
             raise ValueError("Unknown execution target")
         self.runner_mode = runner_mode
         self.worker_code_hashes = {name: sha256((Path(__file__).parent / name).read_bytes())
-                                   for name in ("contracts.py", "api.py", "service.py")}
+                                   for name in ("contracts.py", "api.py", "service.py", "band.py", "band_sdk.py")}
         self.execution_target, self.worker_id = execution_target, worker_id or "local-worker"
         self.compare, self.verify, self.propose = compare, verify, propose
+        self.band_handoff = band_handoff
         self._mutex = threading.RLock()
         self._process_lock = (self.artifact_dir / "worker.lock").open("a")
         try:
@@ -392,6 +393,14 @@ class RunService:
             if verify is None:
                 from .runner import verify_candidate
                 verify = verify_candidate
+            from .band import BandUnavailable, configured_handoff
+            try:
+                handoff = self.band_handoff if self.band_handoff is not None else configured_handoff()
+            except BandUnavailable:
+                self._change(record, execution_status="completed", repair_status="unavailable",
+                             coordination={"provider": "band", "mode": "live", "status": "unavailable"},
+                             limitations=record["limitations"] + ["BAND handoff configuration is unavailable; no repair was attempted."])
+                return
             context = dict(comparison.failure_context)
             context.update(source=asdict(bundle), case={"case_id": spec.case_id,
                 "contract_id": spec.contract_id, "contract_sha256": spec.contract_sha256,
@@ -413,7 +422,18 @@ class RunService:
                                  limitations=record["limitations"] + ["Proposal did not match the permitted application/source."])
                     break
                 self._change(record, repair_status="proposed", proposal=proposal.provenance)
-                verification = verify(spec, bundle, proposal)
+                if handoff is not None:
+                    self._change(record, coordination={"provider": "band", "mode": handoff.mode,
+                                                       "status": "waiting"})
+                    try:
+                        verification, coordination = handoff.verify(spec, bundle, proposal, verify, comparison)
+                    except BandUnavailable:
+                        self._change(record, repair_status="unavailable",
+                                     coordination={"provider": "band", "mode": handoff.mode, "status": "unavailable"},
+                                     limitations=record["limitations"] + ["BAND handoff is unavailable or invalid; no repair was accepted."])
+                        break
+                else:
+                    verification = verify(spec, bundle, proposal)
                 self._bound(verification, bundle, spec)
                 candidate_hash = sha256(proposal.replacement.encode())
                 if verification.bindings.get("candidate_sha256") != candidate_hash:
@@ -434,6 +454,8 @@ class RunService:
                          "execution_status": verification.execution_status,
                          "complete": verification.complete, "candidate_sha256": candidate_hash,
                          "proposal": proposal.provenance}
+                if handoff is not None:
+                    entry["coordination"] = coordination
                 self._change(record, repair_status=verification.repair_status,
                              bindings={**record["bindings"], "candidate_sha256": candidate_hash},
                              verification={"bindings": verification.bindings,
@@ -443,7 +465,8 @@ class RunService:
                                            "executed_case_ids": verification.executed_case_ids},
                              cases=comparison.cases + _public_artifact_refs(verification.cases, f"attempt-{attempt}-", set(verification.artifacts)),
                              attempts=record["attempts"] + [entry],
-                             limitations=record["limitations"] + verification.limitations)
+                             limitations=record["limitations"] + verification.limitations,
+                             **({"coordination": coordination} if handoff is not None else {}))
                 if verification.execution_status != "completed":
                     self._change(record, execution_status=verification.execution_status)
                     return
@@ -452,10 +475,14 @@ class RunService:
                 context["previous_verification"] = {k: v for k, v in verification.to_dict().items() if k != "artifacts"}
             self._change(record, execution_status="completed")
         except subprocess.TimeoutExpired:
+            if record.get("coordination", {}).get("provider") == "band":
+                self._change(record, coordination={**record["coordination"], "status": "unavailable"})
             self._change(record, execution_status="timed_out",
                          repair_status="unavailable" if repair["enabled"] else "not_requested",
                          limitations=record["limitations"] + ["Worker execution exceeded its deadline."])
         except Exception:
+            if record.get("coordination", {}).get("provider") == "band":
+                self._change(record, coordination={**record["coordination"], "status": "unavailable"})
             self._change(record, execution_status="setup_failed",
                          repair_status="unavailable" if repair["enabled"] else "not_requested",
                          limitations=record["limitations"] + ["Worker or evidence validation failed; this run cannot be accepted."])

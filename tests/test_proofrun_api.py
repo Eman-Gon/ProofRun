@@ -22,7 +22,12 @@ class ProofRunAPITests(unittest.TestCase):
         self.service.get_run.return_value = self.run
         self.service.get_case.return_value = {"case_id": "customer-nickname-v1"}
         self.service.artifact.return_value = (b"measured evidence\n", "text/plain; charset=utf-8")
-        self.server = create_server(self.service, TOKEN, port=0)
+        self.research = Mock()
+        self.research.submit.return_value = {
+            "schema_version": "proofrun.research.v1", "research_id": "research-example",
+            "status": "unavailable", "provider": "similarweb",
+        }
+        self.server = create_server(self.service, TOKEN, port=0, research=self.research)
         self.thread = threading.Thread(target=lambda: self.server.serve_forever(poll_interval=0.01), daemon=True)
         self.thread.start()
         self.addCleanup(self.stop)
@@ -67,7 +72,7 @@ class ProofRunAPITests(unittest.TestCase):
         self.assertEqual(self.service.mock_calls, [])
 
     def test_every_worker_route_requires_one_valid_token(self):
-        for method, path in (("POST", "/v1/runs"), ("GET", "/v1/cases/customer-nickname-v1"),
+        for method, path in (("POST", "/v1/runs"), ("POST", "/v1/customer-research"), ("GET", "/v1/cases/customer-nickname-v1"),
                              ("GET", "/v1/runs/run-123"), ("GET", "/v1/runs/run-123/artifacts/results.json")):
             for auth in (None, "wrong-token"):
                 with self.subTest(method=method, path=path, auth=auth):
@@ -77,6 +82,33 @@ class ProofRunAPITests(unittest.TestCase):
                     self.assertEqual(json.loads(body)["error"]["code"], "unauthorized")
                     self.assertNotIn(TOKEN.encode(), body)
         self.assertEqual(self.service.mock_calls, [])
+        self.research.submit.assert_not_called()
+
+    def test_research_is_explicit_authenticated_and_separate_from_verification(self):
+        payload = {"request_id": "duplo-research-example", "domain": "example.com", "month": "2026-08"}
+        status, _, body = self.request("POST", "/v1/customer-research", payload=payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), self.research.submit.return_value)
+        self.research.submit.assert_called_once_with(payload)
+        self.assertEqual(self.service.mock_calls, [])
+        self.assertEqual(self.request("GET", "/v1/customer-research")[0], 404)
+
+    def test_research_errors_do_not_expose_provider_response_or_credentials(self):
+        from src.proofrun.research import ResearchError
+        self.research.submit.side_effect = ResearchError(409, "request_id_conflict", "Research request identity already used.")
+        status, _, body = self.request("POST", "/v1/customer-research", payload={})
+        self.assertEqual(status, 409)
+        self.assertEqual(json.loads(body)["error"]["code"], "request_id_conflict")
+        self.research.submit.side_effect = RuntimeError("secret-provider-key")
+        status, _, body = self.request("POST", "/v1/customer-research", payload={})
+        self.assertEqual(status, 500)
+        self.assertNotIn(b"secret-provider-key", body)
+        self.assertEqual(self.service.mock_calls, [])
+
+    def test_research_rejects_ambiguous_input_before_any_provider_call(self):
+        status, _, _ = self.request("POST", "/v1/customer-research", body=b'{"domain":"one.com","domain":"two.com"}')
+        self.assertEqual(status, 400)
+        self.research.submit.assert_not_called()
 
     def test_duplicate_authorization_is_rejected(self):
         status, _ = self.raw((f"GET /v1/runs/run-123 HTTP/1.1\r\nHost: localhost\r\n"

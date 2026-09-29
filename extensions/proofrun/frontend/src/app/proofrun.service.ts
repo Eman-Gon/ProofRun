@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
+import type { CustomerResearch, CustomerResearchRequest } from './customer-research';
 
 const REST_SEGMENT = 'extensions/proofruns';
 
@@ -12,6 +13,7 @@ export interface RunSummary {
   bindings?: Record<string, unknown>;
   execution?: { target?: string; worker_id?: string; [key: string]: unknown };
   proposal?: { mode?: string; gateway?: string; model?: string; [key: string]: unknown };
+  coordination?: { provider: 'band'; mode: 'live' | 'mock'; status: string; room_id?: string; handoff_id?: string; [key: string]: unknown };
   cases?: { id?: string; stage?: string; status?: string; [key: string]: unknown }[];
   artifacts?: { id: string; sha256: string; size_bytes: number }[];
   limitations?: string[];
@@ -62,5 +64,13 @@ export class ProofRunService {
   artifact(resourceId: string, artifactId: string): Observable<{ fileName: string; base64: string }> {
     return this.http.get(`${this.base()}/${encodeURIComponent(resourceId)}/artifacts/${encodeURIComponent(artifactId)}`)
       .pipe(map(this.unwrap));
+  }
+
+  researchScope(resourceId: string): string {
+    return `${this.base()}/${encodeURIComponent(resourceId)}`;
+  }
+
+  research(resourceId: string, request: CustomerResearchRequest): Observable<CustomerResearch> {
+    return this.http.post(`${this.researchScope(resourceId)}/research`, request).pipe(map(this.unwrap));
   }
 }

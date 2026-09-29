@@ -2,7 +2,9 @@
 
 ProofRun reproduces a supported dependency regression and independently verifies a bounded repair. The current case checks customer-import behavior across Pydantic 1.10.18 and 2.8.2 using approved synthetic inputs. Results keep execution, finding and repair status separate, with evidence tied to the exact source, contract, tests, candidate and environment.
 
-The current stack is **DuploCloud** for initiation and evidence display, **Crusoe** for the CPU worker, and **OpenRouter** for generated repair proposals. Local worker execution is available. The complete DuploCloud portal round trip, Crusoe execution and live OpenRouter proposal still need their integration gates verified; see [the integration record](INTEGRATION.md).
+The chosen demo: **an FDE has a customer meeting in 20 minutes and needs to check a dependency update against five approved customer-import examples.** See the [demo runbook and two-minute talk track](docs/FDE-DEMO.md). The available local proof executes a Python function in Docker; it does not replay requests against a staging API.
+
+The planned integrated demo uses **DuploCloud** for initiation and evidence display, **Crusoe** for the CPU worker, and **OpenRouter** for generated repair proposals. Local worker execution is available. The complete DuploCloud portal round trip, Crusoe execution and live OpenRouter proposal still need their integration gates verified; see [the integration record](INTEGRATION.md).
 
 ## Local setup
 
@@ -98,6 +100,38 @@ Follow the [DuploCloud extension guide](extensions/proofrun/README.md) for DevKi
 Follow the [Crusoe deployment guide](deploy/crusoe/README.md) for the service install, private route and actual VM/host evidence. Set the real worker identity only on that VM. A `crusoe` configuration label alone does not establish remote execution.
 
 ## Development and scope
+
+The two selected additions are **Similarweb customer research** and **BAND repair
+coordination**. Their local implementation and tests are separate from proof of
+live sponsor access. See [Similarweb setup](docs/SIMILARWEB.md) and
+[BAND setup](docs/BAND.md) for the exact prerequisites and commands.
+
+The extension's explicit customer-research action asks for a public domain and a
+completed month. The worker retrieves Similarweb estimated website visits and
+returns a dated report for the meeting brief. This uses Similarweb API credits;
+there is no background polling or automatic provider retry. The research report
+cannot change the approved requirements or verification result.
+
+When BAND is enabled, the proposed candidate must reach the verifier through the
+configured room and its result must return through BAND. An unavailable handoff
+leaves repair unavailable while preserving the reproduced finding. Without BAND
+enabled, the existing direct local verification flow remains available and makes
+no BAND integration claim.
+
+Keep the API key and two registered BAND identities in private worker settings.
+The local ignored `.env.integrations` file can be loaded after `.env.proofrun`:
+
+```bash
+set -a
+source .env.proofrun
+source .env.integrations
+set +a
+# Install the optional SDK only when using BAND:
+python -m pip install -r requirements-band.txt
+```
+
+Restart the worker with those exported settings to apply them. Portal credentials
+remain separate. Neo4j, Plaud and Vultr are outside this selected increment.
 
 Run the focused worker checks in the worker environment:
 

@@ -249,6 +249,38 @@ class BoundedRepairTests(unittest.TestCase):
         timeout = kwargs["timeout"]
         self.assertLessEqual(max(timeout) if isinstance(timeout, tuple) else timeout, 60)
 
+    def test_selected_model_can_use_sampling_defaults_without_weakening_repair_bounds(self):
+        selected_model = "anthropic/claude-sonnet-5"
+
+        class DefaultsOnlyTransport(FakeTransport):
+            def post(self, url, **kwargs):
+                if "temperature" in kwargs["json"]:
+                    self.response = FakeResponse(status=400, raw=b'{"error":"unsupported parameter"}')
+                return super().post(url, **kwargs)
+
+        body = envelope()
+        body["model"] = selected_model
+        transport = DefaultsOnlyTransport(FakeResponse(body))
+        config = RepairConfig(api_key=API_KEY, model=selected_model, max_tokens=2048)
+        proposal = OpenRouterRepairClient(config, transport=transport).propose_patch(self.context, 1)
+        self.assertEqual(len(transport.calls), 1)
+        payload = transport.calls[0][1]["json"]
+        self.assertEqual(payload["model"], selected_model)
+        self.assertNotIn("temperature", payload)
+        self.assertNotIn("models", payload)
+        self.assertFalse(payload["provider"]["allow_fallbacks"])
+        self.assertTrue(payload["provider"]["require_parameters"])
+        self.assertEqual(payload["max_tokens"], 2048)
+        self.assertEqual(payload["response_format"]["type"], "json_schema")
+        schema = payload["response_format"]["json_schema"]
+        self.assertTrue(schema["strict"])
+        self.assertFalse(schema["schema"]["additionalProperties"])
+        self.assertEqual(set(schema["schema"]["required"]), {"base_sha256", "allowed_path", "replacement", "rationale"})
+        self.assertEqual(proposal.provenance["mode"], "mock")
+        self.assertEqual(proposal.provenance["requested_model"], selected_model)
+        self.assertEqual(proposal.provenance["model"], selected_model)
+        self.assertEqual(proposal.replacement, candidate()["replacement"])
+
     def test_default_session_ignores_ambient_proxy_credentials_and_closes(self):
         # HTTP remains mocked here; the default client uses a child process.
         class FakeSession(FakeTransport):

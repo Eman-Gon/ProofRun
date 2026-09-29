@@ -319,7 +319,10 @@ class OpenRouterRepairClient:
             _fail("Failure context contains credential material; request not sent.")
         body = {
             "model": self.config.model, "stream": False, "max_tokens": self.config.max_tokens,
-            "temperature": 0, "provider": {"allow_fallbacks": False, "require_parameters": True},
+            # Leave optional sampling parameters to the selected provider's
+            # defaults. Requiring temperature would exclude models that do not
+            # support it when require_parameters is true.
+            "provider": {"allow_fallbacks": False, "require_parameters": True},
             "response_format": {"type": "json_schema", "json_schema": {
                 "name": "proofrun_patch", "strict": True, "schema": {
                     "type": "object", "additionalProperties": False,

@@ -1,0 +1,3 @@
+# Optional room transport. Install alongside requirements-worker.txt.
+# No model-framework extras; the existing OpenRouter client proposes repairs.
+band-sdk==3.2.1

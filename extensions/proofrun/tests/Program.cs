@@ -141,6 +141,81 @@ using (var client = new ProofRunWorkerClient("https://worker.example", "test-tok
 using (var client = new ProofRunWorkerClient("https://worker.example", "test-token", new FakeHandler(_ => Json(Run("wrong-job-key")))))
     await Reject(() => client.SubmitAsync(new JsonObject { ["job_key"] = key }, default), "submission response binding mismatch");
 
+var nonce = Guid.NewGuid().ToString("D");
+var researchKey = ProofRunWorkerClient.ResearchKey("workspace-1", "resource-1", nonce);
+Check(researchKey == ProofRunWorkerClient.ResearchKey("workspace-1", "resource-1", nonce), "stable research retry identity");
+Check(researchKey != ProofRunWorkerClient.ResearchKey("workspace-2", "resource-1", nonce), "research bound to workspace");
+Check(researchKey != ProofRunWorkerClient.ResearchKey("workspace-1", "resource-2", nonce), "research bound to resource");
+JsonObject Research(string status = "completed") => new()
+{
+    ["schema_version"] = "proofrun.research.v1", ["request_id"] = researchKey, ["research_id"] = "research-test",
+    ["provider"] = "similarweb", ["domain"] = "similarweb.com", ["status"] = status,
+    ["period"] = new JsonObject { ["start_date"] = "2020-02-01", ["end_date"] = "2020-02-29" },
+    ["observed_at"] = "2026-09-29T22:00:00Z",
+    ["metrics"] = status == "completed" ? new JsonArray(new JsonObject { ["name"] = "estimated_visits", ["value"] = 1200, ["unit"] = "visits" }) : new JsonArray(),
+    ["sources"] = new JsonArray(new JsonObject { ["title"] = "Traffic API", ["url"] = "https://developers.similarweb.com/reference/total-traffic-and-engagement" }),
+    ["limitations"] = new JsonArray("Worldwide estimates; not customer requirements."),
+    ["error"] = status == "unavailable" ? new JsonObject { ["code"] = "not_configured", ["message"] = "Similarweb is not configured." } : null,
+    ["raw_provider_headers"] = "SECRET MUST NEVER APPEAR"
+};
+var researchInput = new ProofRunResearchRequest { ClientNonce = nonce, Domain = " WWW.Similarweb.com ", Month = "2020-02" };
+using (var client = new ProofRunWorkerClient("https://worker.example", "test-token", new FakeHandler(request =>
+{
+    Check(request.Method == HttpMethod.Post && request.RequestUri!.AbsoluteUri == "https://worker.example/v1/customer-research", "research uses fixed worker endpoint");
+    Check(request.Headers.Authorization?.Parameter == "test-token", "research uses server bearer token");
+    var body = JsonNode.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult())!.AsObject();
+    Check(body.Count == 3 && body["request_id"]!.GetValue<string>() == researchKey && body["domain"]!.GetValue<string>() == "similarweb.com" && body["month"]!.GetValue<string>() == "2020-02", "research request normalized and bound, no browser-provided identity");
+    return Json(Research());
+})))
+{
+    var observed = await client.ResearchAsync("workspace-1", "resource-1", researchInput, default);
+    Check(observed["status"]!.GetValue<string>() == "completed" && observed["metrics"]!.AsArray().Count == 1, "research retains actual metric");
+    Check(!observed.ToJsonString().Contains("SECRET") && observed["raw_provider_headers"] is null, "research browser response is allowlisted");
+}
+foreach (var status in new[] { "no_data", "unavailable" })
+{
+    using var client = new ProofRunWorkerClient("https://worker.example", "test-token", new FakeHandler(_ => Json(Research(status))));
+    var observed = await client.ResearchAsync("workspace-1", "resource-1", researchInput, default);
+    Check(observed["status"]!.GetValue<string>() == status && observed["metrics"]!.AsArray().Count == 0, "research absence remains explicit");
+}
+foreach (var field in new[] { "request_id", "domain", "period" })
+{
+    var wrong = Research();
+    if (field == "period") wrong["period"]!["end_date"] = "2020-02-28";
+    else wrong[field] = "different-resource";
+    using var client = new ProofRunWorkerClient("https://worker.example", "test-token", new FakeHandler(_ => Json(wrong)));
+    await Reject(() => client.ResearchAsync("workspace-1", "resource-1", researchInput, default), "research response binding: " + field);
+}
+foreach (var mutation in new Action<JsonObject>[] {
+    report => report["sources"]![0]!["url"] = "javascript:alert(1)",
+    report => report["sources"]![0]!["url"] = "https://similarweb.com.attacker.example/",
+    report => report["metrics"]![0]!["value"] = -1,
+    report => report["status"] = "passed",
+    report => report["metrics"] = new JsonArray()
+})
+{
+    var invalid = Research();
+    mutation(invalid);
+    using var client = new ProofRunWorkerClient("https://worker.example", "test-token", new FakeHandler(_ => Json(invalid)));
+    await Reject(() => client.ResearchAsync("workspace-1", "resource-1", researchInput, default), "invalid research data cannot become customer context");
+}
+foreach (var input in new[] {
+    new ProofRunResearchRequest { ClientNonce = nonce, Domain = "https://similarweb.com", Month = "2020-02" },
+    new ProofRunResearchRequest { ClientNonce = nonce, Domain = "127.0.0.1", Month = "2020-02" },
+    new ProofRunResearchRequest { ClientNonce = nonce, Domain = "similarweb.com", Month = "9999-12" },
+    new ProofRunResearchRequest { ClientNonce = "../workspace-2", Domain = "similarweb.com", Month = "2020-02" }
+})
+{
+    using var client = new ProofRunWorkerClient("https://worker.example", "test-token", new FakeHandler(_ => throw new Exception("Invalid research triggered HTTP")));
+    try { await client.ResearchAsync("workspace-1", "resource-1", input, default); throw new Exception("Invalid research accepted"); }
+    catch (ArgumentException) { count++; }
+}
+var coordinated = Run(key);
+coordinated["coordination"] = new JsonObject { ["provider"] = "band", ["mode"] = "mock", ["status"] = "unavailable", ["room_id"] = "room-1", ["raw_token"] = "SECRET" };
+var browserCoordination = ProofRunWorkerClient.ForBrowser(coordinated)["coordination"]!.AsObject();
+Check(browserCoordination["mode"]!.GetValue<string>() == "mock" && browserCoordination["status"]!.GetValue<string>() == "unavailable", "BAND retains actual mode and handoff outcome");
+Check(browserCoordination["raw_token"] is null && coordinated["coordination"]!["raw_token"] is not null, "BAND metadata allowlisted without mutating evidence");
+
 Console.WriteLine($"PASS: {count} standalone HTTP-client assertions (fake transport; no portal or runner verdict claimed).");
 
 sealed class FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler

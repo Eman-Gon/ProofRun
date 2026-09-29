@@ -302,9 +302,9 @@ Person 1 updates this from handoff evidence. Writing documents does not complete
 
 | Gate | Required evidence | Status |
 |---|---|---|
-| DuploCloud round trip | Actual resource/job and returned measured result | BLOCKED: portal work-email/license/model setup; browser connection refused |
+| DuploCloud round trip | Actual resource/job and returned measured result | IN PROGRESS: email/license verified; local sign-in page reached; Mongo startup, SDK build and portal run pending |
 | Crusoe contribution | VM/worker identity, source revision and execution artifacts | BLOCKED: no authorized VM/project/SSH route supplied |
-| OpenRouter contribution | Actual proposal operation, model provenance and candidate | BLOCKED: OPENROUTER_API_KEY and explicit PROOFRUN_MODEL absent |
+| OpenRouter contribution | Actual proposal operation, model provenance and candidate | IN PROGRESS: private key authenticates (HTTP 200); explicit anthropic/claude-sonnet-5 configured; generated proposal pending |
 | Reproduction | Approved baseline pass and supported update failure | VERIFIED LOCALLY: native 7/7 baseline, 6/7 update with supported omission error |
 | Repair verification | Original suite and independent controls on accepted candidate | VERIFIED LOCALLY for prepared narrow candidate: 14/14; generated candidate pending |
 | Bad-fix rejection | Permissive candidate rejected by approved controls | VERIFIED LOCALLY: object-valued nickname rejected in both environments |
@@ -540,19 +540,104 @@ update; both high advisories from the copied sample lock were removed.
 
 ### DuploCloud setup continuation
 
-Rechecked the official sibling DevKit: admin email, local license, admin API
-token and workspace are still unconfigured. The current `run.sh` resolves email
-and obtains its email-verified license before starting services; supplying an
-LLM key alone does not satisfy that separate step. An organizer-provided event
-setup/license can be used if supplied. No account request was sent without an
-approved email.
+The user supplied the admin email and license privately. The official setup
+reported email/license verification complete, then stopped at its model-provider
+step. OpenRouter was selected; the existing private key authenticates against
+OpenRouter's key endpoint (HTTP 200). The explicit model
+`anthropic/claude-sonnet-5` is configured for both the worker and DevKit gateway
+and was checked against the current model catalog. No credentials are included
+in this handoff. A real proposal is still required for the OpenRouter gate.
 
 The ProofRun worker URL/token were copied privately into the ignored mode-0600
 DevKit `.env` for durable studio `env_file` injection, with existing values
-preserved. All actual configured platform ports are free: UI 4210, studio 60031,
+preserved. The actual configured platform ports are UI 4210, studio 60031,
 agent 8010, Mongo 27018, Qdrant 6333 and xterm 6061. Existing host port 27017 is
-left untouched. `docker compose pull --quiet` and
-`docker compose --profile tools pull --quiet builder` were started to prefetch
-the official images while awaiting the email; downloading is not platform
-startup or license verification. Browser/Computer access was available, but
-Computer Use denied access to the native Terminal app; CLI tools remain usable.
+left untouched. The official core images and builder have downloaded. Starting
+`docker compose up -d duplo-ui` reached the actual DuploCloud sign-in page at
+`http://localhost:4210`; the backend is blocked by the native ARM64 MongoDB
+7.0.14 container crashing before database initialization. Admin API token and
+workspace initialization, full SDK build, deployment and portal execution are
+still pending. `extensions/proofrun/scripts/bootstrap-portal.py` follows the
+official token/workspace/access sequence without changing license/model
+settings or revoking tokens; its isolated checks do not count as a portal run.
+
+The user's separate **Locate Samsung T7 Docker files** task is migrating Docker
+storage to the external SSD. It intentionally stopped Docker and temporarily
+protected the source disk file. Person 1 has coordinated with that task and
+stopped Docker-dependent work until the migration reports a healthy engine;
+do not restart Docker or change its disk while that transfer is active. All
+existing volumes and unrelated containers must be preserved. A fresh repair request
+`run-398608ba37fb440d94f2ce59fcd4a135` failed before invoking the model because
+the worker was started with a different Python installation missing `requests`.
+The worker was corrected to use the tested Python 3.12 interpreter; the failed
+record remains in `.commit-watch/person1-openrouter/20260929T202654Z-d17ce046/`.
+It has no model provenance or passing verdict.
+
+
+## 9. User-selected additions — Similarweb and BAND
+
+On September 29, 2026, the user selected exactly **Similarweb + BAND** to
+implement now. This explicitly supersedes their earlier core-first deferral;
+it does not mark any outstanding core gate complete. Neo4j, Plaud and Vultr
+remain deferred.
+
+Similarweb research uses a separate authenticated worker route:
+`POST /v1/customer-research` with exactly `request_id`, `domain`, and a completed
+`month` (`YYYY-MM`). The response is `proofrun.research.v1`, separate from the
+verification record. It includes normalized domain, request identity, period,
+provider, retrieval time, estimated visits when available, source links and
+request/response hashes. The service persists a request claim before a provider
+call; identical retries reuse the report and changed inputs under the same
+identity receive `409`. No provider response bodies, query credentials or
+arbitrary URLs are returned. The DuploCloud backend binds the research identity
+to its workspace, selected resource and client nonce. Browser requests never
+receive worker or Similarweb credentials.
+
+BAND is opt-in worker configuration. With it enabled, two distinct registered
+identities exchange a bound candidate handoff and trusted verification result
+through the configured BAND room. The existing runner still determines the
+verdict; the service still validates source/contract/candidate/test/environment
+bindings. Missing configuration, disconnection or invalid handoff cannot bypass
+the room and directly accept a repair. Comparison findings survive such failures.
+
+Configuration belongs in private worker settings; a local ignored mode-0600
+`.env.integrations` file has empty fields for setup. The BAND SDK is a separate
+optional dependency in `requirements-band.txt`. Consult `docs/SIMILARWEB.md` and
+`docs/BAND.md` for provider setup and validation. At initial preflight, no
+Similarweb API key or BAND identities/room credentials were configured in the
+project, and the customer research domain was still awaiting user input.
+
+Implementation validation and live-provider results must be recorded separately.
+No live Similarweb metric or BAND room exchange is claimed by this setup record.
+
+
+### Selected-addition validation
+
+- Combined core/Similarweb/BAND Python run: **232 tests passed**, with external
+  transport mocked where appropriate. The separate pinned-SDK run passed
+  **58 tests and 45 service subtests**; these overlap the combined checks and
+  should not be summed. SDK network access was blocked during its tests.
+- Frontend: **20 tests passed** and the Angular production build passed.
+  Standalone C# client: **53 assertions passed**. Full DuploCloud host deployment
+  and rendering of the added research controls still need live validation.
+- Fresh local authenticated research HTTP smoke: missing key returned
+  `unavailable/not_configured`, unauthorized access was rejected, retry returned
+  the identical report, and no verification job was created. Receipt:
+  `.commit-watch/optional-integrations/http-smoke.json`.
+- Fresh native Docker run `run-c9f0396ec31b4abf854613d03e3970a6` reproduced the
+  regression, rejected the prepared permissive candidate through a mocked BAND
+  `BLOCKED` handoff, then accepted the prepared narrow candidate through a fresh
+  mocked `PASS` handoff. Receipt:
+  `.commit-watch/optional-integrations/band-native-24c859c6624e/summary.json`.
+  This is real local test execution with **prepared proposals and mocked room
+  delivery**, not live BAND/OpenRouter/Crusoe evidence. An initial smoke harness
+  omitted the newly required room-event method and correctly left repair
+  unavailable; its failed record remains retained separately.
+- Similarweb reports remain separate from verification and are included in the
+  meeting brief only after an explicit fetch. The browser keeps the latest
+  report per workspace/resource for the current page session; it does not
+  automatically refresh research or spend more credits.
+
+Live Similarweb and BAND execution is pending the user's account configuration
+and chosen customer domain. The private integration file contains placeholders;
+no provider credentials or live traffic figures are committed here.
