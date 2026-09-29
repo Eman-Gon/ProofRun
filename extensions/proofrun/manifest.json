@@ -1,0 +1,49 @@
+{
+  "manifestVersion": "1.0",
+  "id": "proofrun.verification",
+  "name": "ProofRun",
+  "version": "0.1.0",
+  "sdkVersion": "REPLACED_BY_BUILD_FROM_sdk-version_ENDPOINT",
+  "backend": {
+    "assemblyDir": "proofrun.verification/0.1.0/backend",
+    "entryAssembly": "Duplo.Extension.ProofRun.dll"
+  },
+  "resources": [{
+    "ticketOriginType": "ProofRunVerification",
+    "restSegment": "extensions/proofruns",
+    "subType": "proofrun-verification",
+    "archetype": "typed",
+    "registrar": "DevOpsResource",
+    "entityType": "Duplo.Extension.ProofRun.ProofRunVerification",
+    "specType": "Duplo.Extension.ProofRun.ProofRunSpec",
+    "resultType": "Duplo.Extension.ProofRun.ProofRunResult",
+    "hooksType": "Duplo.Extension.ProofRun.ProofRunHooks",
+    "serviceType": "Duplo.Extension.ProofRun.ProofRunService"
+  }],
+  "frontend": {
+    "remote": {
+      "remoteName": "duploExtensionProofRun",
+      "remoteEntry": "/v1/aiservicedesk/extensions/proofrun.verification/fe/remoteEntry.json",
+      "exposedModule": "./Extension",
+      "type": "module"
+    },
+    "menus": [{
+      "id": "proofrun.verification-devops",
+      "title": "DevOps",
+      "type": "collapsible-section",
+      "children": [{
+        "id": "proofrun.verification-runs",
+        "title": "ProofRun",
+        "type": "item",
+        "matIcon": "fact_check",
+        "relativeUrl": "extensions/proofruns",
+        "order": 46
+      }]
+    }],
+    "routes": [{
+      "path": "extensions/proofruns",
+      "resourceType": "ProofRunVerification",
+      "subType": "proofrun-verification"
+    }]
+  }
+}

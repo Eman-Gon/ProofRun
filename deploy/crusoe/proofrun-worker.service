@@ -1,0 +1,46 @@
+[Unit]
+Description=ProofRun registered-case verification worker
+Requires=docker.service
+After=network-online.target docker.service
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=proofrun
+Group=proofrun
+SupplementaryGroups=docker
+WorkingDirectory=/opt/proofrun/app
+EnvironmentFile=/etc/proofrun/worker.env
+Environment=HOME=/var/lib/proofrun
+Environment=TMPDIR=/var/lib/proofrun/tmp
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONNOUSERSITE=1
+ExecStart=/opt/proofrun/venv/bin/python -m src.proofrun.api --host 127.0.0.1 --port 8766 --runner native
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/proofrun
+# Docker daemon must see source paths staged in TMPDIR; do not use PrivateTmp.
+PrivateTmp=false
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitNOFILE=4096
+TasksMax=128
+MemoryMax=2G
+CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target

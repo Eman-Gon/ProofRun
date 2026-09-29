@@ -1,0 +1,55 @@
+{
+  "name": "duplo-extension-proofrun-remote",
+  "version": "0.1.0",
+  "description": "ProofRun measured verification \u2014 DuploCloud Native Federation remote.",
+  "scripts": {
+    "build": "ng build --configuration production"
+  },
+  "private": true,
+  "overrides": {
+    "ngx-toastr": {
+      "@angular/common": "$@angular/common",
+      "@angular/core": "$@angular/core"
+    },
+    "esbuild": "0.28.1",
+    "dompurify": "3.4.13",
+    "@hono/node-server": "^2.0.5"
+  },
+  "dependencies": {
+    "@angular-architects/native-federation": "22.0.6",
+    "@angular/cdk": "^22.1.0",
+    "@angular/common": "^22.1.0",
+    "@angular/compiler": "^22.1.0",
+    "@angular/core": "^22.1.0",
+    "@angular/forms": "^22.1.0",
+    "@angular/material": "^22.1.0",
+    "@angular/platform-browser": "^22.1.0",
+    "@angular/router": "^22.1.0",
+    "@duplocloud-internal/ng-common-lib": "file:vendor/duplocloud-internal-ng-common-lib-0.3.0.tgz",
+    "@ng-bootstrap/ng-bootstrap": "^21.0.0",
+    "@ng-select/ng-select": "^23.5.1",
+    "@ngbracket/ngx-layout": "^22.0.1",
+    "@ngx-translate/core": "^18.0.0",
+    "@popperjs/core": "^2.11.8",
+    "@swimlane/ngx-datatable": "^25.0.0",
+    "angularx-flatpickr": "^8.1.0",
+    "bootstrap": "^4.6.2",
+    "echarts": "^6.1.0",
+    "flatpickr": "^4.6.9",
+    "marked": "^18.0.7",
+    "monaco-editor": "^0.55.1",
+    "ngx-echarts": "^22.0.0",
+    "ngx-markdown": "^22.0.0",
+    "ngx-monaco-editor-v2": "22.0.4",
+    "ngx-toastr": "^20.0.5",
+    "rxjs": "^7.8.0",
+    "tslib": "^2.6.0",
+    "zone.js": "~0.16.2"
+  },
+  "devDependencies": {
+    "@angular/build": "22.0.9",
+    "@angular/cli": "22.0.9",
+    "@angular/compiler-cli": "^22.1.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,4 @@
+# Minimal Python 3.12 worker/runtime; preserve legacy CLI requirements separately.
+# Pydantic fixture versions are installed only in the two pinned test images.
+requests==2.34.2
+packaging==26.3

@@ -1,6 +1,18 @@
 # ProofRun — core integration and three-chat build plan
 
-Status: **PLANNED; live integrations unverified.** Source baseline: `7118d720ea2ae3e9bc3a2a4f7f61540348086451`, inspected September 29, 2026. Read [CLAUDE.md](CLAUDE.md) for current capabilities, commands, ownership and evidence rules. [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md) stays deferred until the core gate passes.
+Status: **IN PROGRESS: authenticated local worker and native verification execute successfully; DuploCloud portal, Crusoe and live OpenRouter gates remain blocked on setup/access.** Source baseline: `7118d720ea2ae3e9bc3a2a4f7f61540348086451`, inspected September 29, 2026. Read [CLAUDE.md](CLAUDE.md) for current capabilities, commands, ownership and evidence rules. [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md) stays deferred until the core gate passes.
+
+## User-supplied sponsor references
+
+Links supplied September 29, 2026. Documentation access does not establish account access, event eligibility or a working integration.
+
+| Reference | Use and review status |
+|---|---|
+| [OpenRouter — The AI Conference Hackathon](https://openrouter.notion.site/The-AI-Conference-Hackathon-x-OpenRouter-3e62fd57c4dc803b859de72f6a99e023) | Event-specific reference for Person 3. The web tool could not retrieve this page; credits, rules and setup details remain unverified. |
+| [Similarweb MCP setup](https://docs.similarweb.com/api-v5/similarweb-mcp/mcp-setup) | Setup documentation retrieved. Optional evaluation only; see [OPTIONAL_SPONSORS.md](OPTIONAL_SPONSORS.md). |
+| [User-supplied Google document](https://docs.google.com/document/d/1Sz2JgqQPuo-81KyrwESvrHK26Zp5t7bjVPC2uRfY3lo/edit?tab=t.0) | The web tool could not retrieve this document. Its title, sponsor association and requirements remain unverified. |
+| [BAND hacker guide](https://www.band.ai/hacker-guide) | Guide retrieved; existing optional proposer/verifier handoff reference. |
+| [DuploCloud DevKit repository](https://github.com/duplocloud/devkit) | Repository page retrieved; core extension setup reference. |
 
 ## 1. First milestone and architecture
 
@@ -70,9 +82,9 @@ Requires a key with usable limits/credit and an available selected model. Use se
 
 Do not assume an SDK is installed: existing `requests` can perform the HTTP call. Choose an explicit model during setup. A connectivity greeting is only preflight; the model must materially produce the claimed proposal/analysis. If unavailable, preserve the reproduced finding and mark repair unavailable. Never silently substitute a prepared fix while claiming generated repair.
 
-### Target configuration — proposed, not implemented
+### Current configuration
 
-This replaces the inherited configuration guidance. These settings are not all understood by today's code.
+The root `.env.example` contains only the current ProofRun stack. Use `requirements-worker.txt` for the native worker and the setup commands in `README.md`. The worker reads exported environment variables; it does not automatically load `.env`. DuploCloud's account/license/model setup remains in the separate DevKit, and Crusoe deployment uses `deploy/crusoe/worker.env.example`.
 
 | Setting / setup item | Consumer | Responsibility |
 |---|---|---|
@@ -82,10 +94,11 @@ This replaces the inherited configuration guidance. These settings are not all u
 | `PROOFRUN_WORKER_TOKEN` | Extension and worker | Server authentication; never browser data |
 | `PROOFRUN_ARTIFACT_DIR` | Worker | Private persisted evidence location |
 | `PROOFRUN_EXECUTION_TARGET` | Worker | `local` / `crusoe`; a label alone is not hosting evidence |
+| `PROOFRUN_WORKER_ID` | Worker | `local-worker` locally; the recorded VM identity on Crusoe |
 | Setup-managed DuploCloud settings | DevKit | Admin verification, gateway and workspace |
 | Crusoe account/VM access | Deployment operator | Provisioning and host management, outside test containers |
 
-Put pins, image identities, test limits and case selection in versioned manifests. Person 3 owns configuration/example-file migration. Do not add legacy provider credentials to these requirements. Existing imports may still require code/dependency cleanup even for a credential-free offline entry point.
+Put pins, image identities, test limits and case selection in versioned manifests. The native worker does not require credentials or repository/test-command settings from the earlier application. Keep those settings out of the active environment template.
 
 ## 3. Shared contracts — agree before parallel edits
 
@@ -289,18 +302,18 @@ Person 1 updates this from handoff evidence. Writing documents does not complete
 
 | Gate | Required evidence | Status |
 |---|---|---|
-| DuploCloud round trip | Actual resource/job and returned measured result | NOT VERIFIED |
-| Crusoe contribution | VM/worker identity, source revision and execution artifacts | NOT VERIFIED |
-| OpenRouter contribution | Actual proposal operation, model provenance and candidate | NOT VERIFIED |
-| Reproduction | Approved baseline pass and supported update failure | NOT VERIFIED |
-| Repair verification | Original suite and independent controls on accepted candidate | NOT VERIFIED |
-| Bad-fix rejection | Permissive candidate rejected by approved controls | NOT VERIFIED |
-| Evidence integrity | Source/case/environment/candidate binding; stale/empty evidence rejected | NOT VERIFIED |
-| Fresh demonstration | Another teammate can repeat setup/run; failure states and limitations visible | NOT VERIFIED |
+| DuploCloud round trip | Actual resource/job and returned measured result | BLOCKED: portal work-email/license/model setup; browser connection refused |
+| Crusoe contribution | VM/worker identity, source revision and execution artifacts | BLOCKED: no authorized VM/project/SSH route supplied |
+| OpenRouter contribution | Actual proposal operation, model provenance and candidate | BLOCKED: OPENROUTER_API_KEY and explicit PROOFRUN_MODEL absent |
+| Reproduction | Approved baseline pass and supported update failure | VERIFIED LOCALLY: native 7/7 baseline, 6/7 update with supported omission error |
+| Repair verification | Original suite and independent controls on accepted candidate | VERIFIED LOCALLY for prepared narrow candidate: 14/14; generated candidate pending |
+| Bad-fix rejection | Permissive candidate rejected by approved controls | VERIFIED LOCALLY: object-valued nickname rejected in both environments |
+| Evidence integrity | Source/case/environment/candidate binding; stale/empty evidence rejected | LOCAL checks pass; complete hashes and exact cases in artifacts; remote evidence pending |
+| Fresh demonstration | Another teammate can repeat setup/run; failure states and limitations visible | Local API collector and verifier commands pass; portal demonstration pending |
 
 Two-minute demo: show the approved customer case, start the check in DuploCloud, display baseline/update evidence, show the generated patch and rejected permissive alternative, then the accepted candidate's complete verification report with real worker/model provenance. If execution takes longer, start earlier and label historical output honestly. Do not present a saved run as a new live execution.
 
-Integrated revision: **not recorded**. Evidence/run ID: **not recorded**. Core status: **PLANNED**. When every gate passes, record `CORE_COMPLETE`, then evaluate one optional integration.
+Integrated base revision: **f9112a2c947223a95c9467131294e318b0ced3df with uncommitted owned changes**. Evidence/run ID: **run-3a32c31729724b0aa1a0ddb177cf4feb** (local native HTTP comparison). Core status: **IN_PROGRESS; sponsor gates blocked**. When every gate passes, record `CORE_COMPLETE`, then evaluate one optional integration.
 
 Handoff format:
 
@@ -315,3 +328,231 @@ Blockers and next owner:
 ```
 
 Documentation validation: global Python 3.12 successfully ran the existing CLI help commands. No application tests, comparison runs, account registrations, model calls, VM provisioning or deployments were executed. Setup/build/test commands were source-checked; proposed interfaces need implementation and runtime validation.
+
+## 8. Person 1 implementation handoff — September 29, 2026
+
+The active checkout is `/Users/emanschool/ProofRun`, branch `main`, HEAD
+`f9112a2c947223a95c9467131294e318b0ced3df`. Work is uncommitted; existing
+sponsor-reference edits above and in `OPTIONAL_SPONSORS.md` are preserved.
+The three people are using this checkout with non-overlapping ownership.
+
+**Interface baseline: `proofrun.v1`.** `src/proofrun/contracts.py` now defines
+`CaseSpec`, `SourceBundle`, `ComparisonEvidence`, `PatchProposal`,
+`VerificationEvidence`, and `ProposalUnavailable`. Treat that file as the
+constructor source of truth; request schema changes through Person 1.
+
+- Person 2: implement `run_comparison(case_spec, source_bundle)` and
+  `verify_candidate(case_spec, source_bundle, proposal)`. `CaseSpec.root` is the
+  registered source snapshot; `artifact_dir` is the private run directory.
+  SourceBundle contains immutable UTF-8 content and its SHA256. Person 1 validates
+  the git revision before dispatch. Person 2 owns the canonical
+  `demo/upgrade/contract.json`; its raw-byte SHA256 is `contract_sha256`.
+- Person 3: implement `propose_patch(failure_context, attempt)` (attempts 1–2).
+  The context contains `source` (including content), `case`, approved `contract`,
+  and measured `comparison`. Return a full replacement for only `allowed_path`,
+  with base SHA256, rationale and actual model provenance. Raise
+  `ProposalUnavailable` with a safe message on unavailable/refused/invalid output.
+- Evidence uses JSON data and an internal `artifacts` map from safe public ID to
+  absolute file path beneath `artifact_dir`. The service validates paths and
+  returns authenticated links, hashes and sizes; filesystem paths are private.
+  Expected/executed test IDs are stage-qualified; case records retain `id`,
+  `stage`, `status`, environment and actual test identity.
+- Bindings use `revision`, `source_sha256`, `contract_sha256`,
+  `environment_manifest_sha256`, `tests_sha256`, and, for verification,
+  `candidate_sha256`. A proposal has no verdict. Only complete, correctly bound
+  verifier evidence may set `verified`; comparison findings survive failed repair.
+- `GET /v1/cases/customer-nickname-v1` is an additive authenticated endpoint for
+  the extension backend to obtain the registered submission bindings; it adds
+  `job_key` before `POST /v1/runs`. Token and worker URL remain server-side.
+- Person 3's `.env.example` additions are coordinated: `OPENROUTER_API_KEY`,
+  `PROOFRUN_MODEL`, `PROOFRUN_WORKER_URL`, `PROOFRUN_WORKER_TOKEN`,
+  `PROOFRUN_ARTIFACT_DIR`, `PROOFRUN_EXECUTION_TARGET`. No new runtime dependency
+  is needed for Person 1's standard-library HTTP adapter.
+
+Local preflight: Docker Desktop is running, Compose v5.3.1 is available, both
+prepared Pydantic images exist. The official DevKit was cloned separately to
+`/Users/emanschool/proofrun-duplocloud-devkit`. `./run.sh --non-interactive`
+stopped with `Missing Authentication__LocalAdminEmail`; work-email verification,
+license/model setup, portal login and a real portal agent response are pending.
+No saved reports or sample calculations count as the DuploCloud round trip.
+
+### Implemented HTTP behavior and local evidence
+
+Person 1 owns `src/proofrun/{__init__,contracts,service,api}.py`,
+`tests/test_proofrun_{api,service}.py`, `extensions/proofrun/`, and shared guide
+updates. Person 2/3 files were integrated through their documented boundaries,
+with their uncommitted changes preserved. No commit, push, PR or production
+change was performed.
+
+The HTTP adapter uses the Python standard library. It requires server bearer
+authentication for every `/v1/` route; `/health` exposes only schema and health.
+Requests are bounded to 64 KiB and reject duplicate JSON keys. Run records use
+atomic writes and a process lock. A second active job receives `409 worker_busy`;
+an identical job key/body returns the existing record with `200`, changed content
+with that key receives `409`, and newly accepted work returns `202`. Restarted
+unfinished jobs become `interrupted`. Artifacts are copied into a private,
+immutable publication directory, allowlisted by ID and checked against their
+recorded SHA256 on every download. There is no arbitrary source URL/path/shell
+execution endpoint.
+
+The service snapshots approved fixture inputs and binds HEAD plus the explicit
+source-content bundle, contract bytes, test/verifier identities, images and
+observed versions. Native evidence must contain all seven registered checks in
+each of two environments. The repair loop makes at most two proposal attempts;
+changed source/test/verifier/environment/candidate bindings or incomplete
+verification cannot become `verified`. Model unavailability preserves the
+reproduced finding. The explicit `--runner prepared` adapter invokes the existing
+offline demo in a child process and conservatively keeps its repair unaccepted.
+Default `--runner native` consumes Person 2's strengthened runner.
+
+Fresh measured evidence (all **local Docker + synthetic inputs**, not portal or
+Crusoe evidence):
+
+| Check | Actual result and evidence |
+|---|---|
+| Native authenticated HTTP + artifact collection | `run-3a32c31729724b0aa1a0ddb177cf4feb`, completed / regression_reproduced / not_requested; 14 cases, 4 hash-checked downloads. `.commit-watch/person1-final-http/collection.json` and `record.json`. |
+| Native missing-model behavior | `run-2895281d706440459db4034742976807`, completed / regression_reproduced / unavailable; artifact downloads and identical POST retry passed. `.commit-watch/proofrun-integration/last-http-run.json`. Earlier contract/verifier hashes are retained, not presented as current acceptance. |
+| Bounded orchestration with explicitly prepared proposals | `run-e111aa9e76fa401981691f0d29a959f5`: permissive candidate rejected on attempt 1, narrow candidate verified on attempt 2. Real Docker execution; injected proposer is **prepared**, not OpenRouter. `.commit-watch/proofrun-orchestration/last-http-run.json`. |
+| Existing-runner adapter | `run-de8cb11a96f24ab0886f44c1acb1fe23`, completed / regression_reproduced / not_requested; `.commit-watch/proofrun-bridge/last-successful-run.json`. First attempt `run-a7bd2273fc8845f2bd7f1cd6a137d7b1` correctly remains setup_failed after a missing snapshot fixture; fixed before rerun. |
+| Current native verifier, original suites, bad fix, restrictive umask | `.commit-watch/proofrun-verifier/20260929T195114Z-056ffde1/experiment.json`; full details in `demo/upgrade/PERSON2_HANDOFF.md`. |
+| Docker-to-host worker route | A separate unprivileged client container retrieved `/health` at `http://host.docker.internal:8766`. This is a client/network check, not a network-enabled test container or an actual DevKit-container check. |
+
+Current canonical contract hash:
+`fd54523ba6cda11d1190758ecfb253519a8e6f1be7bc11130d49e010181e2f3b`.
+Clients must fetch registry bindings for each **new** run rather than copy a
+historical submission. An existing idempotency key retains its exact original
+submission. Full source/test/verifier/candidate/environment hashes are in each
+run's artifacts and the Person 2 handoff.
+
+Checks actually run after integration:
+
+```bash
+python3.12 -m pytest tests/test_proofrun_api.py tests/test_proofrun_service.py \
+  tests/test_proofrun_runner.py tests/test_proofrun_repair.py \
+  tests/test_upgrade_demo.py tests/test_upgrade_sandbox.py -q --disable-warnings
+# 185 passed, 146 warnings (pytest/unittest compatibility and existing AST warnings).
+python3.12 -m src.proofrun.api --help
+# Successful.
+git diff --check
+# Successful.
+```
+
+These unit tests use explicit mocks for external transport where appropriate;
+the separate Docker/HTTP measurements above establish actual local execution.
+An earlier combined run raced an in-progress Person 3 transport refactor and
+failed one test. Person 3 corrected the subprocess mock boundary; the stable
+combined run above passed. No live model proposal was produced.
+
+### Repeat locally and finish the DuploCloud gate
+
+The native worker is running on `127.0.0.1:8766`. Its generated credential is in
+ignored mode-0600 `.env.proofrun`; it was never printed. This file is local setup,
+not a shared dependency/configuration replacement. Preserve it and any existing
+secrets. To restart after stopping that worker, from this checkout:
+
+```bash
+set -a
+source .env.proofrun
+set +a
+python3.12 -m src.proofrun.api --host 127.0.0.1 --port 8766 --runner native
+```
+
+In another terminal with the same private worker environment loaded, this
+repeatable collector submits a **new** native run and verifies artifact downloads:
+
+```bash
+python3.12 deploy/crusoe/run-worker.py --expected-target local \
+  --output-dir .commit-watch/my-fresh-http-run
+```
+
+Choose a new output directory each time. `--repair` requests an actual configured
+provider and intentionally cannot pass the collector's generated-repair gate
+without live OpenRouter provenance. Use `python3.12 -m demo.upgrade.verify_offline`
+for the separate prepared narrow/permissive experiment.
+
+Complete first-time setup in the sibling official DevKit at revision
+`e9f016fd90a67611907fcf673701351669eaa47d`:
+
+```bash
+cd /Users/emanschool/proofrun-duplocloud-devkit
+./run.sh
+```
+
+Its current concrete blocker is the missing work email, followed by the
+setup-managed verification/license/password/model steps. The browser also
+confirmed `http://localhost:4210` returned connection refused. Once the portal
+runs, follow `extensions/proofrun/README.md` to inject only worker URL/token into
+the backend, build against the **actual host SDK**, deploy, sign in to
+`extension-dev`, and press **Run verification**. Capture the real portal resource
+ID, worker run ID, states and artifact download. Until that succeeds, the
+DuploCloud round-trip gate remains blocked even when the standalone C# HTTP
+client and frontend compile.
+
+Next owners: Person 2's local handoff is integrated; rerun on Person 3's actual
+Crusoe worker when supplied. Person 3 must supply authorized VM/project/SSH route
+and privately configured OpenRouter key/model, retain host evidence and execute
+the same native interface remotely. Person 1 must finish the host-SDK build,
+portal deployment and real result display after DevKit access setup. Optional
+sponsors remain deferred.
+
+### Extension adapter evidence
+
+The real standalone C# client executed from Docker against the native Python
+worker, preserving the server credential outside browser data:
+
+- `run-c43017c17ba3401792dd106dfaab6bdd`: completed / regression_reproduced /
+  not_requested, 14 executed cases and four artifacts downloaded with exact
+  SHA256/size checks.
+- `run-aed1afaa03e04c8d914f8f34e8868e2e`: the same actual comparison with generated
+  repair requested, completed / regression_reproduced / unavailable because
+  provider configuration is absent. This run records its exact source/contract/verifier and service bindings;
+  it is retained as measured historical evidence.
+
+Receipts: `extensions/proofrun/evidence/client-round-trips.json` (ignored local
+runtime evidence); complete run records and published artifacts are under
+`.commit-watch/proofrun/<run_id>/`. This proves the C# adapter → worker → actual
+runner → result/artifact path. It does **not** prove DuploCloud portal initiation
+or display: no portal resource was created and the host SDK is still unavailable.
+
+The Angular production build completed; isolated .NET client checks passed 29
+assertions. Repeatable commands and final frontend dependency validation are in
+`extensions/proofrun/README.md`. The UI provides **Run verification**, an optional
+bounded generated-repair request, the three states, actual case rows, provenance,
+limitations and authenticated artifact downloads. Portal rendering and the full
+C# SDK integration still require the real host deployment.
+
+Final orchestration check after artifact-reference integration: native run
+`run-98993ab0a65647a58c64ffff1aed067f`, completed / regression_reproduced /
+verified after **prepared** permissive rejection followed by prepared narrow-fix
+acceptance. Both repaired matrices executed; the final response contains 28
+comparison/latest-verification observations, with each attempt's complete
+evidence retained separately. Every exported report/log reference resolves to
+its allowlisted, attempt-prefixed artifact ID; SHA256 describes the exported
+bytes. Evidence: `.commit-watch/proofrun-final-orchestration/last-run.json`.
+No provider or portal contribution is claimed by this test.
+
+Final integration checks: **185 Python tests passed** after adding the prepared
+repair-failure preservation and attempt-artifact-reference checks. The final
+frontend rebuild and official federation structure check also passed; full host
+SDK compatibility remains untested. The extension runbook records four remaining
+moderate Angular dependency advisories requiring a coordinated host-compatible
+update; both high advisories from the copied sample lock were removed.
+
+### DuploCloud setup continuation
+
+Rechecked the official sibling DevKit: admin email, local license, admin API
+token and workspace are still unconfigured. The current `run.sh` resolves email
+and obtains its email-verified license before starting services; supplying an
+LLM key alone does not satisfy that separate step. An organizer-provided event
+setup/license can be used if supplied. No account request was sent without an
+approved email.
+
+The ProofRun worker URL/token were copied privately into the ignored mode-0600
+DevKit `.env` for durable studio `env_file` injection, with existing values
+preserved. All actual configured platform ports are free: UI 4210, studio 60031,
+agent 8010, Mongo 27018, Qdrant 6333 and xterm 6061. Existing host port 27017 is
+left untouched. `docker compose pull --quiet` and
+`docker compose --profile tools pull --quiet builder` were started to prefetch
+the official images while awaiting the email; downloading is not platform
+startup or license verification. Browser/Computer access was available, but
+Computer Use denied access to the native Terminal app; CLI tools remain usable.

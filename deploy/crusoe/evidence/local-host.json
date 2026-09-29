@@ -1,0 +1,99 @@
+{
+  "crusoe_identity_record": null,
+  "docker_server_version": "29.7.2",
+  "execution_target": "local",
+  "host": {
+    "architecture": "arm64",
+    "boot_id_sha256": null,
+    "distribution": null,
+    "hostname": "Emanuels-MacBook-Pro-2.local",
+    "os": "Darwin",
+    "python": "3.12.2",
+    "release": "23.4.0"
+  },
+  "images": {
+    "1.10.18": {
+      "architecture": "arm64",
+      "available": true,
+      "image_id": "sha256:73c5126343049110de8db81e8cbd1568f3b00668a6830a53801a3b52f3534c40",
+      "os": "linux",
+      "reference": "secondlook-pydantic:1.10.18"
+    },
+    "2.8.2": {
+      "architecture": "arm64",
+      "available": true,
+      "image_id": "sha256:ead217c56b8c386eeba2dbcf0ff7b6e7a2d70ce5bbb9ddadc62b62416dc16f7a",
+      "os": "linux",
+      "reference": "secondlook-pydantic:2.8.2"
+    }
+  },
+  "kind": "host_snapshot",
+  "limitations": [
+    "Host snapshot is supporting identity evidence. Pair it with fresh API run artifacts and image-preparation evidence; it is not a verification verdict."
+  ],
+  "observed_at": "2026-09-29T19:50:47.429939+00:00",
+  "provider_identity_basis": null,
+  "runtime_ready": true,
+  "schema_version": "proofrun.worker-setup.v1",
+  "source": {
+    "content_manifest": {
+      "demo/upgrade/app.py": "e10eb64618cc671713f1bc7acd21ea79d7bc99f98f8ce3697d6f512009322f26",
+      "demo/upgrade/contract.json": "fd54523ba6cda11d1190758ecfb253519a8e6f1be7bc11130d49e010181e2f3b",
+      "demo/upgrade/fixed_app.py": "04c4b567966c615fed857f39f7278d399daa5c990bb77d87388046734759ef13",
+      "demo/upgrade/permissive_app.py": "f9a31257c4f8e4f494a2df2d46534b269093a7fb5af996c97f9335b71d70f222",
+      "demo/upgrade/probe_harness.py": "15aea037f56266d736f437ef18bc81de02a102ef3a57c1f30d208638c03615cd",
+      "demo/upgrade/requirements-new.txt": "ad64800661cd32c4d2fca4878db150c7357044d665ccee8d29b1b048c7beb23e",
+      "demo/upgrade/requirements-old.txt": "5d621ef8c4893224f8c1691b06c6114a1efe6715320741dacb13a4295e5dfa68",
+      "demo/upgrade/source.json": "6779bf8650acdb40633b4e5b20436c601704050120a17c69cdde3ec0c0d95bb7",
+      "demo/upgrade/test_controls.py": "6c3a8f331cbfda1cb78b51fedfca9f22755f097fa80885ef6bc73ab617800fd9",
+      "demo/upgrade/test_existing.py": "92f2b8b101a31509afb944d8db01c40c48f37ff022dfb6a6854d5a3ef4527882",
+      "demo/upgrade/test_upgrade.py": "a11e37482eccc7d548924e746ac32dd10e38cc1842a9b0678890b94698f8cd3a",
+      "demo/upgrade/verify_offline.py": "7a58602482d61a0f3803dd58bb9acd938d9fc8cd53b43ac31af6ae98cd3e67dc",
+      "deploy/crusoe/check-worker.py": "1da2e5466c3ef3ea2cce800e6b5175ad9ad1ee962467f667d9c498081736773d",
+      "deploy/crusoe/collect-host-evidence.py": "a42e0a3b8b62c34debb40ed150c842b3a0b5c3467f6c83bdd041b37b62e67968",
+      "deploy/crusoe/evidence_common.py": "504f80c510c2763a7fa3815c712eece1195e8b62b3753f35c462467dc13dfdef",
+      "deploy/crusoe/install-worker.sh": "2d189f9c28c42d0f4449083cd39e59118283afd20d0d010f24bc03f17bccc7e9",
+      "deploy/crusoe/prepare-images.py": "19bf8e46e16f2062bd25fc083614696e0e4769e14e88cf15ee8cea65bf3b4d2b",
+      "deploy/crusoe/proofrun-worker.service": "903478af69c97b77dc1f16fd5e04b7b5f96c5ed1a24a15fd5a26113aa68be615",
+      "deploy/crusoe/run-worker.py": "6306d809074bd256759b000dd332ab9589fd6b63108781a371519a5bbe600d18",
+      "deploy/crusoe/tunnel.sh": "a6fad7569fac79bd944103a9e84592052bbe2f4d0ac7a418766c9d81c7f989b4",
+      "deploy/crusoe/worker.env.example": "49a83e16d335cfa7ec9e9c826178741447e99a8e24b725a29a26ad901731d295",
+      "requirements-worker.txt": "9cec7ef815a35f6a797e32e0d99bb00b4dee421b4439e0cc3aefe706e8d5f2c2",
+      "sandbox/upgrade.Dockerfile": "fd6cf63b222fa50685b55c30e7abfbe4fc88e9a7ae19da7cf50fa96e733dcafd",
+      "src/__init__.py": "65584d93ba000043003b2e6638e7669601816ceed1f2c6590fc4138154ad9be3",
+      "src/brightdata.py": "466ac44aa9a4b4e829a59d266ff1d2fc7ee88de41d2045680d0b4c515d2955a0",
+      "src/cognee_cloud.py": "d48018061b6d11319adbbdf0d968d0897048e0650a0d7f2ed7966ebe209456bc",
+      "src/config.py": "7076f60119b23ee369895e76428c6bab7c11692a18a70c7e76b5306baab8cc8e",
+      "src/dashboard.py": "d8a37bacb89ec819933dd7b2d94df118cf1a2104b9cdaf9082ec67c3589673d3",
+      "src/demo_ready.py": "7c001b86206bcebf7808efbf94e99f8a922a0a53b1982ca80ef406b232642082",
+      "src/dependencies.py": "a4621c62f9bed0b5e7bd5c370ccf15bc6961b011b48f9c67aca250c912f993e4",
+      "src/dependency_context.py": "bf83e2432711e703db22f4fffddb827c13035907cb47e2e1c4e7faf6a10474c2",
+      "src/github_fetch.py": "e3074b03205a20706f633c0ea26beb9bca87f9ca8ce66d953b1d356ec291b953",
+      "src/judge.py": "15982a33ed7d7c22706c8a426321ab607e691e42384ad6673f21400d0a286e1a",
+      "src/main.py": "20be65a743e2670bfc1d1767cf2c36a23da46b51e08716479667a72dda40bb04",
+      "src/memory.py": "ec8eb69018e51225556e4bccda469c19eab4474c17245fb55729a667a45fcdd8",
+      "src/proofrun/__init__.py": "bca59479251ad09ecfc2fde141b011effa1da97c15fb1f6893a863208f6628a4",
+      "src/proofrun/api.py": "1a19e02c42c20752a6df8c5b12af5dd092369550a4505aff6099b8cab5e5a053",
+      "src/proofrun/config.py": "59e4f3649945434832c53ccb852aca5e5bb33b111333f0a642e9091b155fec15",
+      "src/proofrun/contracts.py": "084ed70dc581b59e7bdbc3539937710fb74819f1b091c044f27dc77c37d072fc",
+      "src/proofrun/repair.py": "e1627460696ceb5e6eb9f8a2893e080eb131dadb62b268ba77df239a2ddf362a",
+      "src/proofrun/runner.py": "c9678a15eab3d99b8c390112f5ad965597f563e7953985308601cb257bacea27",
+      "src/proofrun/service.py": "a7ce318432c6e9465b385af320f12f9ad9b0da00f458e954f74273d9b74a77c5",
+      "src/public_repo.py": "14ac9f892746d03207fa7ddfc126ee277c51f9a810b58c0c3c7c9453ac29dfe8",
+      "src/report.py": "a049e97d5e8e1a5e42f84c4c5f8509fb4b6b312363a74ca891218bd0319c14a7",
+      "src/result_explanation.py": "3bc89aef8465d40dca0574c05d3609b96ecf2ff63b39c8701d205004ac063a4f",
+      "src/sandbox.py": "4b6f1e61f37385e654be8d662687967f1315a6d203f7585f4ec3d8d10ee78a98",
+      "src/upgrade_demo.py": "fffd42005db1ef7902c00a63e7b59aeeb1391bcc2a9fa3fca4012a9d2c40903d",
+      "src/upgrade_memory.py": "2e5e1cb6627929f9cf6dfbce82fc8dc72fb3f4a8b984748832cd746b41151978",
+      "src/upgrade_sandbox.py": "5cbf58c098ec6336e1e20538353b89aacd065b9bdde523cbd8140fc3fe82bf52"
+    },
+    "content_manifest_sha256": "a9d386d23a6dd1da4befa0f94808a4d59156906732cc17be2d62ff21b3088123",
+    "identity_note": "Manifest binds actual files, including uncommitted/new implementation; HEAD alone does not identify this deployment.",
+    "revision": "f9112a2c947223a95c9467131294e318b0ced3df",
+    "tracked_worktree_dirty": true
+  },
+  "worker_dependencies": {
+    "packaging": "24.0",
+    "requests": "2.34.2"
+  }
+}

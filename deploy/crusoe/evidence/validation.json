@@ -1,0 +1,60 @@
+{
+  "checks": [
+    {
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "name": "shell_syntax",
+      "passed": true
+    },
+    {
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "name": "installer_rejects_non_linux",
+      "passed": true
+    },
+    {
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "name": "tunnel_rejects_option_as_host",
+      "passed": true
+    },
+    {
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "name": "route_rejects_invalid_port",
+      "passed": true
+    },
+    {
+      "exit_code": 2,
+      "expected_exit_code": 2,
+      "name": "crusoe_claim_rejects_local_host",
+      "passed": true
+    },
+    {
+      "name": "python_syntax",
+      "passed": true
+    },
+    {
+      "name": "real_local_api_auth_route",
+      "passed": true
+    },
+    {
+      "name": "real_local_native_reproduction",
+      "passed": true
+    },
+    {
+      "name": "missing_model_fails_requested_repair_gates",
+      "passed": true
+    },
+    {
+      "count": 4,
+      "name": "downloaded_artifact_hashes",
+      "passed": true
+    }
+  ],
+  "live_local_run_id": "run-41ce85c3d0ae428791ed9323a185bcaf",
+  "observed_at": "2026-09-29T19:51:07.241180+00:00",
+  "remote_runtime_verified": false,
+  "scope": "Local validation only; no Linux systemd or Crusoe deployment executed.",
+  "systemd_unit_runtime_verified": false
+}

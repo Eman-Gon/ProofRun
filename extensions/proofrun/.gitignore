@@ -1,0 +1,12 @@
+dist/
+backend/bin/
+backend/obj/
+backend/sdk-packages/
+frontend/node_modules/
+frontend/.angular/
+frontend/vendor/
+tests/bin/
+tests/obj/
+evidence/
+frontend/npm-audit.local.json
+compose.worker.local.yaml

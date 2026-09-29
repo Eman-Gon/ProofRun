@@ -22,7 +22,7 @@ from .brightdata import _call, _make_client, _private_transport_logs, _text
 from .dependencies import changed_dependencies
 from .report import terminal_text
 from .sandbox import preflight
-from .upgrade_sandbox import build_image, run_probe
+from .upgrade_sandbox import build_image, environment_image_tag, parse_probe_result, run_probe
 from .upgrade_memory import recall_prior, remember_and_recall
 
 
@@ -31,6 +31,16 @@ DEMO = ROOT / "demo" / "upgrade"
 STATE = ROOT / ".commit-watch"
 VERSIONS = ("1.10.18", "2.8.2")
 PRIMARY_SOURCE = "https://pydantic.dev/docs/validation/2.8/get-started/migration/"
+ORIGINAL_TEST_IDS = (
+    "test_existing.TestExisting.test_explicit_nickname",
+    "test_existing.TestExisting.test_explicit_none",
+)
+PROBE_TEST_IDS = ("test_upgrade.TestUpgrade.test_missing_nickname",)
+CONTROL_TEST_IDS = tuple("test_controls.TestControls." + name for name in (
+    "test_nickname_omitted", "test_nickname_null", "test_nickname_string_unchanged",
+    "test_nickname_object_rejected", "test_required_name_rejected",
+))
+REPAIRED_TEST_IDS = ORIGINAL_TEST_IDS + PROBE_TEST_IDS + CONTROL_TEST_IDS
 
 
 class UpgradeError(RuntimeError):
@@ -220,32 +230,95 @@ def render_probe(plan: ProbePlan) -> str:
     )
 
 
+def _completed_result(result: dict, expected_ids: tuple[str, ...], version: str) -> bool:
+    """Accept only exact, nonempty executed tests with a consistent runtime result."""
+    if not isinstance(result, dict) or result.get("status") not in {"pass", "fail"}:
+        return False
+    output = result.get("output_tail", "")
+    if not isinstance(output, str):
+        return False
+    evidence = parse_probe_result(output)
+    if not evidence or evidence.get("version") != version or evidence.get("integrity_errors") != []:
+        return False
+    if re.findall(r"^SECONDLOOK_DEPENDENCY_VERSION=([^\s]+)$", output, re.M) != [version]:
+        return False
+    tests = evidence.get("tests")
+    if (not isinstance(tests, list) or not tests
+            or any(not isinstance(test, dict) or not isinstance(test.get("id"), str) for test in tests)
+            or type(evidence.get("tests_run")) is not int or evidence["tests_run"] != len(expected_ids)
+            or sorted(test.get("id", "") for test in tests) != sorted(expected_ids)
+            or any(test.get("status") not in {"pass", "fail", "error"} for test in tests)):
+        return False
+    hashes = evidence.get("tests_sha256")
+    expected_files = {case_id.split(".")[0] + ".py" for case_id in expected_ids}
+    if (not isinstance(hashes, dict) or set(hashes) != expected_files
+            or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+                   for value in [evidence.get("source_sha256"), evidence.get("harness_sha256"), *hashes.values()])):
+        return False
+    passed = all(test["status"] == "pass" for test in tests)
+    return (result["status"] == ("pass" if passed else "fail")
+            and type(result.get("exit_code")) is int
+            and result["exit_code"] == (0 if passed else 1))
+
+
+def finding_status(results: dict) -> str:
+    """A failed or missing repair never changes an already reproduced finding."""
+    expected = {"existing_old": ORIGINAL_TEST_IDS, "existing_new": ORIGINAL_TEST_IDS,
+                "probe_old": PROBE_TEST_IDS, "probe_new": PROBE_TEST_IDS}
+    if not all(_completed_result(results.get(name), ids, VERSIONS[0 if name.endswith("old") else 1])
+               for name, ids in expected.items()):
+        return "inconclusive"
+    if any(results[name]["status"] != "pass" for name in ("existing_old", "existing_new", "probe_old")):
+        return "inconclusive"
+    if results["probe_new"]["status"] == "pass":
+        return "no_difference_observed"
+    failure = parse_probe_result(results["probe_new"]["output_tail"])["tests"][0].get("detail", "")
+    if not isinstance(failure, str) or not all(term in failure for term in ("ValidationError", "nickname", "Field required")):
+        return "inconclusive"
+    return "regression_reproduced"
+
+
 def classify(results: dict) -> str:
-    for name, result in results.items():
-        expected = VERSIONS[0] if name.endswith("old") else VERSIONS[1]
-        versions = re.findall(r"^SECONDLOOK_DEPENDENCY_VERSION=([^\s]+)$", result["output_tail"], re.M)
-        if result["status"] in ("error", "timeout") or versions != [expected]:
-            return "inconclusive"
-    required = {"existing_old": "pass", "existing_new": "pass", "probe_old": "pass",
-                "probe_new": "fail", "fixed_old": "pass", "fixed_new": "pass"}
-    if set(results) != set(required) or any(results[name]["status"] != status for name, status in required.items()):
-        return "inconclusive"
-    failure = results["probe_new"]["output_tail"]
-    if not all(term in failure for term in ("ValidationError", "nickname", "Field required")):
-        return "inconclusive"
-    return "confirmed_break"
+    """Keep the historical CLI marker while separating findings from repairs."""
+    return "confirmed_break" if finding_status(results) == "regression_reproduced" else "inconclusive"
+
+
+def repair_status(results: dict, prefix: str = "fixed") -> str:
+    completed = [_completed_result(results.get(f"{prefix}_{label}"), REPAIRED_TEST_IDS, version)
+                 for label, version in zip(("old", "new"), VERSIONS)]
+    if not all(completed):
+        return "unavailable"
+    return "verified" if all(results[f"{prefix}_{label}"]["status"] == "pass" for label in ("old", "new")) else "rejected"
+
+
+def execution_status(results: dict) -> str:
+    if any(result.get("status") == "timeout" for result in results.values()):
+        return "timed_out"
+    if any(result.get("status") not in {"pass", "fail"} for result in results.values()):
+        return "setup_failed"
+    return "completed"
 
 
 def render_report(report: dict) -> str:
     lines = ["HACKDAY IDEA — DEPENDENCY UPGRADE", f"Pydantic {VERSIONS[0]} -> {VERSIONS[1]}",
              "Result: " + ("CONFIRMED BEHAVIOR BREAK" if report["status"] == "confirmed_break" else "INCONCLUSIVE"),
+             f"Execution: {report.get('execution_status', 'unknown')}",
+             f"Finding: {report.get('finding_status', 'unknown')}",
+             f"Prepared repair: {report.get('repair_status', 'unknown')}",
              f"Affected code: {report['usage']['path']}:{report['usage']['line']} ({report['usage']['symbol']})",
              f"  {report['usage']['code']}", "", "Measured comparison:"]
     for name, result in report["results"].items():
         lines.append(f"  {name:14} {result['status'].upper():7} {result['duration_seconds']}s")
     if report["status"] == "confirmed_break":
         lines += ["", "Existing tests pass in both environments. The new missing-nickname probe passes on V1",
-                  "and raises ValidationError on V2. Adding '= None' makes the same probe pass on both."]
+                  "and raises ValidationError on V2."]
+    if report.get("repair_status") == "verified":
+        lines.append("The prepared '= None' repair passes the original suite, omission probe and five independent controls on both versions.")
+    negative = report.get("negative_demonstration", {})
+    if negative:
+        lines.append("Deliberately permissive prepared repair: " + negative["repair_status"].upper())
+        for name, result in negative["results"].items():
+            lines.append(f"  {name:14} {result['status'].upper():7} {result['duration_seconds']}s")
     lines += ["", f"Source: {report['source']['source_url']}", f"Source mode: {report['source']['provenance']}",
               f"Probe: {report['probe_provenance']}", f"Test SHA256: {report['test_sha256']}",
               f"Cognee: {report['memory']}", f"Evidence: {report['artifact_dir']}",
@@ -301,7 +374,8 @@ def _run_demo(*, offline: bool, rebuild: bool, remember: bool, prepare: bool,
     plan = propose_probe(source, usage, os.getenv("GROQ_API_KEY", ""), offline, prior_memory)
     probe = run_dir / "test_upgrade.py"
     probe.write_text(render_probe(plan))
-    for filename in ("app.py", "fixed_app.py", "test_existing.py", "requirements-old.txt", "requirements-new.txt"):
+    for filename in ("app.py", "fixed_app.py", "permissive_app.py", "test_existing.py", "test_controls.py",
+                     "requirements-old.txt", "requirements-new.txt"):
         shutil.copyfile(DEMO / filename, run_dir / filename)
     (run_dir / "source.json").write_text(json.dumps(source, indent=2) + "\n")
     (run_dir / "probe-plan.json").write_text(plan.model_dump_json(indent=2) + "\n")
@@ -309,25 +383,49 @@ def _run_demo(*, offline: bool, rebuild: bool, remember: bool, prepare: bool,
     for label, version in zip(("old", "new"), VERSIONS):
         print(f"Preparing Docker environment for Pydantic {version}...", flush=True)
         if offline:
-            preflight(f"secondlook-pydantic:{version}")
+            preflight(environment_image_tag(run_dir / f"requirements-{label}.txt"))
         images[label] = build_image(run_dir / f"requirements-{label}.txt", f"secondlook-pydantic:{version}", rebuild)
+    repaired_tests = [run_dir / "test_existing.py", probe, run_dir / "test_controls.py"]
     jobs = [
-        ("existing_old", "old", "app.py", [run_dir / "test_existing.py"]),
-        ("existing_new", "new", "app.py", [run_dir / "test_existing.py"]),
-        ("probe_old", "old", "app.py", [probe]), ("probe_new", "new", "app.py", [probe]),
-        ("fixed_old", "old", "fixed_app.py", [probe]), ("fixed_new", "new", "fixed_app.py", [probe]),
+        ("existing_old", "old", "app.py", [run_dir / "test_existing.py"], ORIGINAL_TEST_IDS),
+        ("existing_new", "new", "app.py", [run_dir / "test_existing.py"], ORIGINAL_TEST_IDS),
+        ("probe_old", "old", "app.py", [probe], PROBE_TEST_IDS),
+        ("probe_new", "new", "app.py", [probe], PROBE_TEST_IDS),
+        ("fixed_old", "old", "fixed_app.py", repaired_tests, REPAIRED_TEST_IDS),
+        ("fixed_new", "new", "fixed_app.py", repaired_tests, REPAIRED_TEST_IDS),
+        ("controls_old", "old", "app.py", [run_dir / "test_controls.py"], CONTROL_TEST_IDS),
+        ("controls_new", "new", "app.py", [run_dir / "test_controls.py"], CONTROL_TEST_IDS),
+        ("permissive_old", "old", "permissive_app.py", repaired_tests, REPAIRED_TEST_IDS),
+        ("permissive_new", "new", "permissive_app.py", repaired_tests, REPAIRED_TEST_IDS),
     ]
     results = {}
-    for name, environment, app, tests in jobs:
+    for name, environment, app, tests, expected_ids in jobs:
         print(f"Running {name}...", flush=True)
-        results[name] = asdict(run_probe(images[environment], run_dir / app, tests))
+        results[name] = asdict(run_probe(images[environment], run_dir / app, tests,
+                                        expected_test_ids=list(expected_ids),
+                                        expected_version=VERSIONS[0 if environment == "old" else 1]))
         (run_dir / f"{name}.txt").write_text(results[name]["output_tail"] + "\n")
+    all_results = dict(results)
+    controls = {name: results.pop(name) for name in ("controls_old", "controls_new")}
+    permissive = {name: results.pop(name) for name in ("permissive_old", "permissive_new")}
+    test_hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in repaired_tests}
     report = {"status": classify(results), "checked_at": datetime.now(timezone.utc).isoformat(),
+              "execution_status": execution_status(all_results), "finding_status": finding_status(results),
+              "repair_status": repair_status(results), "repair_provenance": "prepared checked-in fix; no generated proposal",
               "upgrade": upgrade, "usage": usage, "source": source, "plan": plan.model_dump(),
               "probe_provenance": "prepared probe data (--offline)" if offline else "Strands/Groq proposed data; trusted test renderer",
               "test_sha256": hashlib.sha256(probe.read_bytes()).hexdigest(),
               "app_sha256": hashlib.sha256((run_dir / "app.py").read_bytes()).hexdigest(),
               "fixed_app_sha256": hashlib.sha256((run_dir / "fixed_app.py").read_bytes()).hexdigest(),
+              "tests_sha256": test_hashes,
+              "expected_test_ids": {"original": list(ORIGINAL_TEST_IDS), "probe": list(PROBE_TEST_IDS),
+                                    "controls": list(CONTROL_TEST_IDS), "repaired": list(REPAIRED_TEST_IDS)},
+              "original_controls": {"results": controls, "test_sha256": test_hashes["test_controls.py"]},
+              "negative_demonstration": {
+                  "provenance": "deliberately permissive prepared candidate; no generated proposal",
+                  "candidate_sha256": hashlib.sha256((run_dir / "permissive_app.py").read_bytes()).hexdigest(),
+                  "repair_status": repair_status(permissive, "permissive"), "results": permissive,
+              },
               "requirements_sha256": {label: hashlib.sha256((run_dir / f"requirements-{label}.txt").read_bytes()).hexdigest()
                                       for label in ("old", "new")},
               "images": images, "results": results, "artifact_dir": str(run_dir),
@@ -338,7 +436,7 @@ def _run_demo(*, offline: bool, rebuild: bool, remember: bool, prepare: bool,
                                         fromfile="app.py", tofile="app.py"))
     (run_dir / "suggested-fix.patch").write_text(patch)
     report["fix_patch"] = patch
-    if remember and not offline and report["status"] == "confirmed_break":
+    if remember and not offline and report["status"] == "confirmed_break" and report["repair_status"] == "verified":
         print("Saving the finding in Cognee, then querying Cognee to verify retrieval...", flush=True)
         try:
             # Cloud builds run remotely and can legitimately spend 180 seconds

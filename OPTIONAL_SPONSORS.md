@@ -94,7 +94,9 @@ These are proposed uses of documented capabilities, not tested ProofRun integrat
 - **If justified:** show returned metrics, dates, and provenance in a separate market-context section. Traffic estimates are never compatibility, correctness, or repair evidence.
 - **Acceptance:** demonstrate the stated user decision and trace it to an actual response. Otherwise leave this option deferred.
 
-[Similarweb Websites Dataset](https://developers.similarweb.com/docs/websites-dataset)
+[Similarweb Websites Dataset](https://developers.similarweb.com/docs/websites-dataset) · [Similarweb MCP setup](https://docs.similarweb.com/api-v5/similarweb-mcp/mcp-setup)
+
+The MCP setup page, reviewed September 29, 2026, lists `https://mcp.similarweb.com` as the server endpoint. It requires a Similarweb login, a compatible MCP client and a subscription with API/MCP access (API-only, Business or Enterprise). MCP queries consume data credits; entitlement and event access have not been verified for this project. This reference does not change Similarweb's deferred status.
 
 ## Three-person coordination and order
 

@@ -1,78 +1,112 @@
-# Hackday Idea
+# ProofRun
 
-Hackday Idea helps developers investigate dependency upgrades and review repository changes. It combines public source checks, prepared before/after tests, and saved investigation results in a local dashboard.
+ProofRun reproduces a supported dependency regression and independently verifies a bounded repair. The current case checks customer-import behavior across Pydantic 1.10.18 and 2.8.2 using approved synthetic inputs. Results keep execution, finding and repair status separate, with evidence tied to the exact source, contract, tests, candidate and environment.
 
-Findings are scoped to the source, dependency versions, and checks shown. Static warnings identify patterns to investigate; measured comparisons record what the supplied tests actually establish.
+The current stack is **DuploCloud** for initiation and evidence display, **Crusoe** for the CPU worker, and **OpenRouter** for generated repair proposals. Local worker execution is available. The complete DuploCloud portal round trip, Crusoe execution and live OpenRouter proposal still need their integration gates verified; see [the integration record](INTEGRATION.md).
 
-## Setup
+## Local setup
 
-Use Python 3.12 and Git. Docker with its daemon running is required for measured comparisons and sandbox tests.
+Use Python 3.12, Git and Docker with its daemon running. Run these commands from the repository root:
 
-```sh
+```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-worker.txt
+
+if [ -f .env.proofrun ]; then
+  PROOFRUN_ENV_FILE=.env.proofrun
+else
+  PROOFRUN_ENV_FILE=.env
+  if [ ! -e "$PROOFRUN_ENV_FILE" ]; then
+    cp .env.example "$PROOFRUN_ENV_FILE"
+  fi
+fi
+chmod 600 "$PROOFRUN_ENV_FILE"
 ```
 
-Create `.env` from `.env.example` if it does not already exist. Keep existing credentials and never commit `.env`. Public repository scans work without service credentials, subject to GitHub rate limits. Configure the optional integrations only for workflows that use them.
+This reuses the existing private `.env.proofrun` worker configuration when present and only copies [.env.example](.env.example) when a new `.env` is needed. Keep private configuration ignored by Git. For local execution, use `PROOFRUN_EXECUTION_TARGET=local`, `PROOFRUN_WORKER_ID=local-worker` and `PROOFRUN_WORKER_URL=http://127.0.0.1:8766`.
 
-## Local dashboard
+Set `PROOFRUN_WORKER_TOKEN` to a secret of at least 32 characters. This command fills an empty setting or adds a missing setting directly to the selected file, preserving an existing token and displaying no secret:
 
-```sh
-python -m src.dashboard
+```bash
+python - "$PROOFRUN_ENV_FILE" <<'PY'
+from pathlib import Path
+import re
+import secrets
+import sys
+
+path = Path(sys.argv[1])
+content = path.read_text()
+pattern = r"(?m)^PROOFRUN_WORKER_TOKEN=[ \t]*$"
+if re.search(pattern, content):
+    content = re.sub(pattern, "PROOFRUN_WORKER_TOKEN=" + secrets.token_urlsafe(32), content)
+elif not re.search(r"(?m)^PROOFRUN_WORKER_TOKEN=", content):
+    content = content.rstrip("\n") + "\nPROOFRUN_WORKER_TOKEN=" + secrets.token_urlsafe(32) + "\n"
+path.chmod(0o600)
+path.write_text(content)
+PY
 ```
 
-Open [Hackday Idea at localhost:8765](http://127.0.0.1:8765). Select an account's public repository or enter a public GitHub URL, then choose **Check repository**. The account defaults to the owner in `TARGET_REPO`.
+For generated repair, privately fill `OPENROUTER_API_KEY` and an explicit `PROOFRUN_MODEL` provider/model ID in the selected file. Comparison-only runs do not need model access. Missing model configuration leaves repair unavailable while preserving any reproduced finding; there is no fallback model or prepared repair substitution.
 
-Repository checks read a bounded source snapshot at a pinned commit, inventory supported dependency manifests, and identify known upgrade patterns. They do not execute repository code or install its dependencies. Results include source locations, explanations, references, and coverage limits. No supported matches does not guarantee compatibility. Recent scans remain available for the current server session.
+## Prepare and run the worker
 
-The **Saved examples** collection opens curated source snapshots and comparisons. **Saved scans & prepared comparisons** provides previous results, proposed patches, and JSON exports. Prepared cases include a pandas frequency-alias comparison and a Pydantic customer-import example. Missing artifacts or images are reported as unavailable.
+Build the two pinned fixture images before starting test jobs. Preparation downloads packages and saves image identities; test containers run without network access or provider credentials.
 
-**Run comparison** collects fresh Docker evidence using a prepared probe. **Run live investigation** on the customer-import case also retrieves upstream context, requests constrained test data, and stores and retrieves confirmed findings. Source and memory status are reported separately from test outcomes. Displaying a saved result does not repeat its service calls. Proposed fixes are tested in disposable copies.
+```bash
+python deploy/crusoe/prepare-images.py \
+  --output .commit-watch/proofrun-setup/image-preparation.json
 
-## Dependency comparisons
-
-Build the pinned Pydantic environments, then run the prepared comparison without external service calls:
-
-```sh
-python -m src.main upgrade-demo --prepare
-python -m src.main upgrade-demo --offline
+set -a
+source "$PROOFRUN_ENV_FILE"
+set +a
+python -m src.proofrun.api --host 127.0.0.1 --port 8766 --runner native
 ```
 
-The comparison runs existing tests, a targeted missing-field probe, and the same probe with an explicit-default fix against both dependency versions. Containers have no network access or credentials. Package installation occurs when building images. Reports record source provenance, versions, hashes, output, and the proposed patch under `.commit-watch/upgrade-demo/`.
+The API reads the exported process environment; it does not load private environment files automatically. If a worker is already running, use its matching configuration for collection below, or stop it before starting another on the same port. All `/v1/` routes require the worker bearer token. The token stays in server configuration and must never enter browser data or test containers.
 
-For a live investigation, configure the source and inference providers in `.env`:
+In a second terminal, activate the virtual environment and export the same private configuration, then collect a fresh comparison and its hash-checked artifacts:
 
-```sh
-python -m src.main upgrade-demo
+```bash
+source .venv/bin/activate
+if [ -f .env.proofrun ]; then
+  PROOFRUN_ENV_FILE=.env.proofrun
+else
+  PROOFRUN_ENV_FILE=.env
+fi
+set -a
+source "$PROOFRUN_ENV_FILE"
+set +a
+python deploy/crusoe/run-worker.py --expected-target local \
+  --output-dir .commit-watch/my-fresh-http-run
 ```
 
-`--require-integrations` requires successful source verification and memory storage/retrieval. Without strict mode, a failed provider fetch can use a labeled direct HTTPS fallback for the fixed upstream URL. `--no-memory` skips memory outside strict mode. Offline mode uses prepared data and cached images.
+Choose a new output directory for each collection. Add `--repair` to request up to two actual model proposals; a successful repair collection requires live OpenRouter provenance and independent verification. The worker accepts the registered `customer-nickname-v1` case and runs one job at a time.
 
-Comparison exit codes are `1` for a confirmed behavior break and `2` for inconclusive evidence or setup/integration failure. Image preparation returns `0` on success. A finding applies only to the supplied source, versions, and tests.
+To check the verifier separately with the checked-in narrow and deliberately permissive candidates:
 
-
-## Commit review
-
-The CLI can store a repository baseline, judge a new commit against fixed criteria, and run its tests in Docker. Configure the target, test command, and image for your repository, then build the image:
-
-```sh
-docker build -t commit-watch-sandbox:latest -f sandbox/Dockerfile .
-python -m src.main ingest --count 35
-python -m src.main check <sha>
+```bash
+python -m demo.upgrade.verify_offline
 ```
 
-Ingest before the commits you want to review, or use `ingest --ref <earlier-sha>`. Checks reject commits already in the baseline and require the baseline head to be an ancestor of the checked commit. Checks do not add commits to the baseline.
+This executes real local Docker tests with **prepared candidates and synthetic inputs**. It expects a reproduced regression, acceptance of the narrow fix and rejection of the permissive fix. It returns `0` only when that experiment passes, otherwise `2`, and writes evidence under `.commit-watch/proofrun-verifier/`. It does not call OpenRouter or establish generated repair.
 
-Review criteria are message/size mismatch, out-of-place files, logic without tests, and a clear break from baseline patterns. Judgment and test results remain separate. Dependency changes can receive bounded upstream context. Baseline metadata, the selected diff, and relevant context may be sent to configured inference services.
+## DuploCloud and Crusoe
 
-Review exit codes are `0` for no flag and passing tests, `1` for a flag or test failure, and `2` for configuration, provider, sandbox, or timeout errors. Adapt and rebuild the sandbox image when changing repositories or dependencies.
+Follow the [DuploCloud extension guide](extensions/proofrun/README.md) for DevKit setup, backend-only worker configuration, building and portal deployment. A backend running in a container needs a route to the worker reachable from that container. Its own localhost is not the laptop worker.
 
-## Development
+Follow the [Crusoe deployment guide](deploy/crusoe/README.md) for the service install, private route and actual VM/host evidence. Set the real worker identity only on that VM. A `crusoe` configuration label alone does not establish remote execution.
 
-```sh
-python -m pip install -r requirements-dev.txt
-python -m pytest tests -q
+## Development and scope
+
+Run the focused worker checks in the worker environment:
+
+```bash
+python -m pip install pytest==9.1.1
+python -m pytest tests/test_proofrun_api.py tests/test_proofrun_service.py \
+  tests/test_proofrun_runner.py tests/test_proofrun_repair.py -q
 ```
 
-The implementation retains existing storage identifiers and command names for compatibility with saved results. Automatic repository changes, webhooks, and general before/after test generation for arbitrary repositories are not implemented.
+These tests exercise API, orchestration, verification and proposal handling, using mocks where appropriate. They do not establish live sponsor integration. The separate Docker experiment and actual service runs provide runtime evidence.
+
+The supported scope is one registered Python/Pydantic fixture. Arbitrary repository execution, automatic repository changes and automatic deployment are not implemented. A verified candidate passed the declared checks; its evidence is limited to the supplied source, inputs and environments.

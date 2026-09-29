@@ -20,9 +20,11 @@ from requests import Session
 
 from src.sandbox import SandboxResult
 from src.upgrade_demo import (
-    PRIMARY_SOURCE, ProbePlan, UpgradeError, affected_usage, classify, detect_upgrade, read_source, render_probe,
-    run_demo,
+    CONTROL_TEST_IDS, ORIGINAL_TEST_IDS, PRIMARY_SOURCE, PROBE_TEST_IDS, REPAIRED_TEST_IDS,
+    ProbePlan, UpgradeError, affected_usage, classify, detect_upgrade, execution_status, finding_status,
+    read_source, render_probe, repair_status, run_demo,
 )
+from src.upgrade_sandbox import parse_probe_result
 
 
 def plan_data(**overrides):
@@ -36,7 +38,34 @@ def plan_data(**overrides):
     return data
 
 
-def comparison_results():
+def probe_result(version, ids, failed_id=None, detail=None):
+    detail = detail or (
+        "pydantic_core._pydantic_core.ValidationError: 1 validation error for Customer\n"
+        "nickname\n  Field required [type=missing, input_value={'name': 'Ada'}, input_type=dict]\n"
+    )
+    records = [{"id": case_id, "status": "error" if case_id == failed_id else "pass",
+                **({"detail": detail} if case_id == failed_id else {})} for case_id in ids]
+    evidence = {
+        "schema_version": "proofrun.probe.v1", "version": version, "tests_run": len(ids), "tests": records,
+        "source_sha256": "a" * 64, "tests_sha256": {case_id.split(".")[0] + ".py": "b" * 64 for case_id in ids},
+        "harness_sha256": "c" * 64, "integrity_errors": [],
+    }
+    return {
+        "status": "fail" if failed_id else "pass", "exit_code": 1 if failed_id else 0,
+        "output_tail": f"Ran {len(ids)} tests in 0.001s\n"
+                       + (detail + "FAILED (errors=1)\n" if failed_id else "OK\n")
+                       + f"SECONDLOOK_DEPENDENCY_VERSION={version}\nPROOFRUN_PROBE_RESULT=" + json.dumps(evidence),
+        "duration_seconds": 0.001,
+    }
+
+
+def replace_evidence(result, mutate):
+    evidence = parse_probe_result(result["output_tail"])
+    mutate(evidence)
+    result["output_tail"] = result["output_tail"].split("PROOFRUN_PROBE_RESULT=")[0] + "PROOFRUN_PROBE_RESULT=" + json.dumps(evidence)
+
+
+def comparison_results(include_additional=False):
     statuses = {
         "existing_old": "pass", "existing_new": "pass", "probe_old": "pass",
         "probe_new": "fail", "fixed_old": "pass", "fixed_new": "pass",
@@ -44,18 +73,15 @@ def comparison_results():
     results = {}
     for name, status in statuses.items():
         version = "1.10.18" if name.endswith("old") else "2.8.2"
-        detail = (
-            "pydantic_core._pydantic_core.ValidationError: 1 validation error for Customer\n"
-            "nickname\n  Field required [type=missing, input_value={'name': 'Ada'}, input_type=dict]\n"
-            "Ran 1 test in 0.001s\nFAILED (errors=1)"
-            if status == "fail" else "Ran 1 test in 0.001s\nOK"
-        )
-        results[name] = {
-            "status": status,
-            "exit_code": 1 if status == "fail" else 0,
-            "output_tail": f"SECONDLOOK_DEPENDENCY_VERSION={version}\n{detail}",
-            "duration_seconds": 0.001,
-        }
+        ids = ORIGINAL_TEST_IDS if name.startswith("existing") else REPAIRED_TEST_IDS if name.startswith("fixed") else PROBE_TEST_IDS
+        results[name] = probe_result(version, ids, PROBE_TEST_IDS[0] if status == "fail" else None)
+    if include_additional:
+        for label, version in (("old", "1.10.18"), ("new", "2.8.2")):
+            results["controls_" + label] = probe_result(version, CONTROL_TEST_IDS, CONTROL_TEST_IDS[0] if label == "new" else None)
+        for label, version in (("old", "1.10.18"), ("new", "2.8.2")):
+            results["permissive_" + label] = probe_result(
+                version, REPAIRED_TEST_IDS, CONTROL_TEST_IDS[3], "AssertionError: ValidationError not raised",
+            )
     return results
 
 
@@ -459,29 +485,32 @@ class ComparisonClassificationTests(unittest.TestCase):
     def test_confirms_complete_matching_version_comparison(self):
         self.assertEqual(classify(comparison_results()), "confirmed_break")
 
-    def test_every_required_outcome_is_necessary(self):
+    def test_every_required_reproduction_outcome_is_necessary(self):
         good = comparison_results()
         for name, result in good.items():
+            if name.startswith("fixed"):
+                continue
             for status in {"pass", "fail", "error", "timeout", "unknown"} - {result["status"]}:
                 with self.subTest(name=name, status=status):
                     changed = deepcopy(good)
                     changed[name]["status"] = status
                     self.assertEqual(classify(changed), "inconclusive")
 
-    def test_missing_or_extra_comparisons_are_inconclusive(self):
+    def test_missing_reproduction_comparisons_are_inconclusive(self):
         for name in comparison_results():
+            if name.startswith("fixed"):
+                continue
             with self.subTest(missing=name):
                 results = comparison_results()
                 del results[name]
                 self.assertEqual(classify(results), "inconclusive")
-        results = comparison_results()
-        results["unexpected_new"] = deepcopy(results["fixed_new"])
-        self.assertEqual(classify(results), "inconclusive")
         self.assertEqual(classify({}), "inconclusive")
 
     def test_each_installed_version_must_match_the_declared_environment_exactly(self):
         good = comparison_results()
         for name in good:
+            if name.startswith("fixed"):
+                continue
             version = "1.10.18" if name.endswith("old") else "2.8.2"
             marker = f"SECONDLOOK_DEPENDENCY_VERSION={version}"
             for replacement in (
@@ -492,6 +521,60 @@ class ComparisonClassificationTests(unittest.TestCase):
                     results = deepcopy(good)
                     results[name]["output_tail"] = results[name]["output_tail"].replace(marker, replacement)
                     self.assertEqual(classify(results), "inconclusive")
+
+    def test_failed_or_missing_repair_does_not_erase_reproduction(self):
+        for status in ("fail", "error", "timeout", "unknown", None):
+            with self.subTest(status=status):
+                results = comparison_results()
+                if status is None:
+                    del results["fixed_new"]
+                else:
+                    results["fixed_new"]["status"] = status
+                self.assertEqual(classify(results), "confirmed_break")
+                self.assertEqual(finding_status(results), "regression_reproduced")
+                self.assertNotEqual(repair_status(results), "verified")
+
+    def test_actual_repair_failure_is_rejected_while_execution_completes(self):
+        results = comparison_results()
+        results["fixed_new"] = probe_result("2.8.2", REPAIRED_TEST_IDS, CONTROL_TEST_IDS[3], "AssertionError: ValidationError not raised")
+        self.assertEqual(repair_status(results), "rejected")
+        self.assertEqual(classify(results), "confirmed_break")
+        self.assertEqual(execution_status(results), "completed")
+
+    def test_original_suite_and_every_control_are_required_for_verified_repair(self):
+        good = comparison_results()
+        self.assertEqual(repair_status(good), "verified")
+        for label in ("old", "new"):
+            name = "fixed_" + label
+            for case_id in REPAIRED_TEST_IDS:
+                with self.subTest(name=name, missing=case_id):
+                    results = deepcopy(good)
+                    replace_evidence(results[name], lambda evidence: evidence.update(
+                        tests=[item for item in evidence["tests"] if item["id"] != case_id], tests_run=7,
+                    ))
+                    self.assertEqual(repair_status(results), "unavailable")
+                    self.assertEqual(classify(results), "confirmed_break")
+
+    def test_wrong_duplicate_skipped_empty_and_stale_evidence_cannot_verify(self):
+        mutations = (
+            lambda evidence: evidence.update(tests=[], tests_run=0),
+            lambda evidence: evidence["tests"].append(dict(evidence["tests"][0])),
+            lambda evidence: evidence["tests"][0].update(id="wrong.case"),
+            lambda evidence: evidence["tests"][0].update(status="skip"),
+            lambda evidence: evidence.update(version="2.13.5"),
+            lambda evidence: evidence.update(integrity_errors=["source_sha256 differs"]),
+        )
+        for mutate in mutations:
+            results = comparison_results()
+            replace_evidence(results["fixed_new"], mutate)
+            self.assertEqual(repair_status(results), "unavailable")
+            self.assertEqual(classify(results), "confirmed_break")
+
+    def test_matching_passes_can_only_report_no_difference(self):
+        results = comparison_results()
+        results["probe_new"] = probe_result("2.8.2", PROBE_TEST_IDS)
+        self.assertEqual(finding_status(results), "no_difference_observed")
+        self.assertEqual(classify(results), "inconclusive")
 
     def test_unrelated_new_version_failures_are_inconclusive(self):
         for output in (
@@ -553,7 +636,7 @@ class RequiredIntegrationFlowTests(unittest.TestCase):
         self.addCleanup(environment.stop)
 
     def execute(self, **options):
-        self.run_probe.side_effect = [SandboxResult(**item) for item in comparison_results().values()]
+        self.run_probe.side_effect = [SandboxResult(**item) for item in comparison_results(include_additional=True).values()]
         with redirect_stdout(io.StringIO()):
             code = run_demo(**{"require_integrations": True, **options})
         reports = list((self.state / "upgrade-demo").glob("*/report.json"))
@@ -593,7 +676,24 @@ class RequiredIntegrationFlowTests(unittest.TestCase):
         self.assertEqual(replay["prior_memory"], prior)
         replay_payload = json.loads(self.agent.call_args.args[0])
         self.assertEqual(replay_payload["previous_verified_findings"], prior)
-        self.assertEqual(self.run_probe.call_count, 12)
+        self.assertEqual(self.run_probe.call_count, 20)
+
+    def test_prepared_demo_runs_original_suite_and_independent_controls_and_rejects_bad_fix(self):
+        code, report = self.execute()
+        self.assertEqual(code, 1)
+        self.assertEqual(report["execution_status"], "completed")
+        self.assertEqual(report["finding_status"], "regression_reproduced")
+        self.assertEqual(report["repair_status"], "verified")
+        self.assertEqual(report["negative_demonstration"]["repair_status"], "rejected")
+        self.assertEqual(set(report["results"]), set(comparison_results()))
+        for index in (4, 5, 8, 9):
+            call = self.run_probe.call_args_list[index]
+            self.assertEqual({path.name for path in call.args[2]}, {"test_existing.py", "test_upgrade.py", "test_controls.py"})
+            self.assertEqual(set(call.kwargs["expected_test_ids"]), set(REPAIRED_TEST_IDS))
+        for name, digest in report["tests_sha256"].items():
+            self.assertEqual(digest, hashlib.sha256((Path(report["artifact_dir"]) / name).read_bytes()).hexdigest())
+        negative = report["negative_demonstration"]
+        self.assertEqual(negative["candidate_sha256"], hashlib.sha256((self.demo / "permissive_app.py").read_bytes()).hexdigest())
 
     def test_strict_cognee_failures_cannot_return_confirmed_success_exit(self):
         cases = (

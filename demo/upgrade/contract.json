@@ -1,0 +1,21 @@
+{
+  "schema_version": "proofrun.v1",
+  "case_id": "customer-nickname-v1",
+  "contract_id": "customer-input-v1",
+  "model_name": "Customer",
+  "field_name": "nickname",
+  "allowed_path": "demo/upgrade/app.py",
+  "baseline_version": "1.10.18",
+  "updated_version": "2.8.2",
+  "cases": [
+    {"id": "nickname_omitted", "input": {"name": "Grace"}, "expected": {"name": "Grace", "nickname": null}},
+    {"id": "nickname_null", "input": {"name": "Grace", "nickname": null}, "expected": {"name": "Grace", "nickname": null}},
+    {"id": "nickname_string", "input": {"name": "Grace", "nickname": "  Amazing Grace  "}, "expected": {"name": "Grace", "nickname": "  Amazing Grace  "}},
+    {"id": "nickname_object_rejected", "input": {"name": "Grace", "nickname": {"unexpected": "object"}}, "expected_error": "ValidationError"},
+    {"id": "required_name_rejected", "input": {"nickname": "Grace"}, "expected_error": "ValidationError"}
+  ],
+  "original_test_ids": [
+    "test_existing.TestExisting.test_explicit_nickname",
+    "test_existing.TestExisting.test_explicit_none"
+  ]
+}

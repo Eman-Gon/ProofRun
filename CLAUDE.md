@@ -82,34 +82,33 @@ Only Person 3 edits shared requirements/configuration after recording the intend
 - Record durable decisions in `INTEGRATION.md`; chats do not share conversation automatically. Send proposed shared-doc changes to Person 1 instead of editing them concurrently.
 - Handoffs include owner, branch/worktree, revision or uncommitted diff, paths, interface version, actual checks, evidence location, mocks and blockers.
 
-## Existing development commands
+## Current development commands
 
-CLI help was successfully checked with global Python 3.12: `python3.12 -m src.main --help` and `python3.12 -m src.main upgrade-demo --help`. No repository `.venv` existed at inspection. Setup, image builds, application runs and tests below were source-checked but **not run during this documentation task**.
+Use the native ProofRun worker and current sponsor configuration in `.env.example`. Follow `README.md` to create and explicitly load private environment settings; the worker does not automatically load `.env`. Existing ignored `.env.proofrun` setup may already contain the local worker token and should be preserved. Do not reintroduce earlier provider settings into the active template.
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-python -m src.main upgrade-demo --prepare
-python -m src.main upgrade-demo --offline
-python -m src.dashboard
+python -m pip install -r requirements-worker.txt
+python deploy/crusoe/prepare-images.py --output .commit-watch/image-preparation.json
+python -m demo.upgrade.verify_offline
+# After exporting the private worker settings:
+python -m src.proofrun.api --host 127.0.0.1 --port 8766 --runner native
 ```
 
-The current CLI imports older libraries; the dependency list is not the target sponsor architecture. Preparation needs Docker/package downloads. Offline execution needs prepared images and does not call external source/model/memory services. Preserve existing `.env` contents; no old provider credentials are required for this offline milestone.
-
-Current measured-demo exit `1` intentionally means its confirmed-break pattern; `2` means inconclusive/setup failure; preparation exits `0` on success; interruption is `130`. There is no general compatible-upgrade verdict returning zero in this demo. Do not turn exit `1` into a worker infrastructure failure.
+Preparation needs Docker/package downloads. The offline verifier uses prepared images and explicitly prepared candidates; it does not call a model and does not prove generated repair. It exits `0` only when the comparison, narrow-fix verification and permissive-fix rejection meet its assertions; otherwise it exits `2`. The earlier CLI and dashboard remain outside the current setup path.
 
 Relevant implementation checks:
 
 ```bash
-python -m pytest tests/test_upgrade_demo.py tests/test_upgrade_sandbox.py -q
-python -m pytest tests/test_dashboard.py tests/test_public_repo.py -q
+python -m pip install pytest==9.1.1
+python -m pytest tests/test_proofrun_api.py tests/test_proofrun_service.py tests/test_proofrun_runner.py tests/test_proofrun_repair.py -q
 ```
 
-Select checks for the changed area. The full suite command is `python -m pytest tests -q`. Unit tests do not verify live sponsor integration. Document new module/test commands after implementing them; do not present proposed commands as available today.
+Select checks for the changed area. The full suite also includes earlier workflows and requires their dependencies from `requirements-dev.txt`; the native worker setup above does not install them. Unit tests do not verify live sponsor integration. Document new module/test commands after implementing them; do not present proposed commands as available today.
 
 ## Completion
 
 Use the evidence gate in `INTEGRATION.md`: actual DuploCloud initiation/results, Crusoe execution, OpenRouter-generated proposal, reproduced regression, original-suite preservation, bad-fix rejection, exact evidence binding and a repeatable integrated demo.
 
-**Current status: PLANNED.** Sponsor runtimes, generated repairs and the revised verifier have not been tested by this documentation task. Optional work remains deferred. Start with your assigned prompt in `INTEGRATION.md`.
+**Current status: IN PROGRESS.** Person 1's authenticated worker and shared `proofrun.v1` types are implemented. Person 2's native verifier has fresh local Docker evidence, including prepared narrow-fix acceptance and permissive-fix rejection. Person 3's repair/deployment code is integrated locally; actual OpenRouter and Crusoe access remain unavailable. DuploCloud extension source is present, but portal setup/deployment is incomplete. See the current handoff and measured checks in sections 7–8 of `INTEGRATION.md`. Optional work remains deferred.

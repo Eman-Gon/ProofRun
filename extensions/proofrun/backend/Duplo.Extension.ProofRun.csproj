@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Backend for the ProofRun extension — compiled by the duplo-extension-dev skill with `dotnet publish`.
+    The SDK is referenced compile-only (ExcludeAssets="runtime") and exact-pinned to the running host
+    version, so the extension ships only its own DLL and shares the host's SDK type identity at load time.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseAppHost>false</UseAppHost>
+    <IsPackable>false</IsPackable>
+    <!-- Overridden by the build skill: -p:DuploSdkVersion=<value from sdk-version> -->
+    <DuploSdkVersion Condition="'$(DuploSdkVersion)' == ''">1.0.0</DuploSdkVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Duplocloud.AiHelpdesk.Sdk" Version="[$(DuploSdkVersion)]" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>

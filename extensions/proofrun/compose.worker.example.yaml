@@ -1,0 +1,9 @@
+# Pass this as an override to the sibling DevKit compose command. Values are server-only.
+# Export PROOFRUN_WORKER_URL/TOKEN from an ignored local configuration before invoking compose.
+services:
+  duplo-ai-studio:
+    environment:
+      PROOFRUN_WORKER_URL: ${PROOFRUN_WORKER_URL:?Set a backend-reachable worker origin}
+      PROOFRUN_WORKER_TOKEN: ${PROOFRUN_WORKER_TOKEN:?Set the same secret token as the Python worker}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

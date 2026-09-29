@@ -1,13 +1,22 @@
 import io
+import hashlib
+from importlib.metadata import version
+import json
+import os
 from pathlib import Path
+import stat
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from src.sandbox import SandboxError
-from src.upgrade_sandbox import _PROBE_COMMAND, build_image, run_probe
+from src.upgrade_sandbox import (
+    _HARNESS, _PROBE_COMMAND, _ProbeTail, build_image, environment_fingerprint,
+    environment_image_tag, parse_probe_result, run_probe,
+)
 
 
 IMAGE_ID = "sha256:" + "a" * 64
@@ -58,6 +67,24 @@ class ImageBuildTests(unittest.TestCase):
                 with patch("src.upgrade_sandbox.subprocess.run", side_effect=self.docker):
                     self.assertEqual(build_image(self.requirements, "secondlook:old", rebuild), IMAGE_ID)
                 self.assertEqual(len(self.contexts), expected)
+
+    def test_cache_identity_changes_with_requirements_or_dockerfile(self):
+        original = environment_image_tag(self.requirements)
+        self.assertEqual(original, "proofrun-deps:" + environment_fingerprint(self.requirements))
+        self.requirements.write_text("pydantic==2.8.2\n")
+        changed = environment_image_tag(self.requirements)
+        self.assertNotEqual(original, changed)
+        dockerfile = self.root / "Dockerfile"
+        dockerfile.write_text("FROM different-base\n")
+        with patch("src.upgrade_sandbox._DOCKERFILE", dockerfile):
+            self.assertNotEqual(changed, environment_image_tag(self.requirements))
+
+    def test_friendly_tag_is_never_used_to_decide_cache_reuse(self):
+        self.inspect_count = 1
+        with patch("src.upgrade_sandbox.subprocess.run", side_effect=self.docker):
+            build_image(self.requirements, "secondlook:old")
+        inspected = [command[-1] for command in self.commands if command[:3] == ["docker", "image", "inspect"]]
+        self.assertEqual(inspected, [environment_image_tag(self.requirements)])
 
     def test_missing_empty_unpinned_or_remote_requirements_never_build(self):
         for content in ("", "# empty\n", "pydantic>=1\n", "pydantic==1.*\n", "-r /private/other.txt\n",
@@ -253,6 +280,194 @@ exit 1
         self.assertEqual(process.returncode, 1)
         self.assertEqual(process.stdout.count("SECONDLOOK_DEPENDENCY_VERSION="), 1)
         self.assertTrue(process.stdout.rstrip().endswith("SECONDLOOK_DEPENDENCY_VERSION=2.8.2"))
+
+
+class StrictProbeTests(unittest.TestCase):
+    """Docker transport is mocked here; execution claims belong to harness/live tests."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.app = self.root / "app.py"
+        self.test = self.root / "test_app.py"
+        self.app.write_text("def value(): return 1\n")
+        self.test.write_text("import unittest\n")
+        self.expected = ["test_app.TestApp.test_value"]
+        self.transform = lambda value: value
+        self.code = 0
+        self.extra_output = ""
+        self.command = None
+        for target in ("preflight", "_remove"):
+            patcher = patch("src.upgrade_sandbox." + target)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch("src.upgrade_sandbox.subprocess.Popen", side_effect=self.launch)
+        self.popen = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def launch(self, command, **kwargs):
+        self.command = command
+        mount = command[command.index("--mount") + 1]
+        source = Path(mount.split("src=", 1)[1].split(",dst=", 1)[0])
+        self.assertEqual({path.name for path in source.iterdir()}, {
+            "app.py", "test_app.py", "_proofrun_probe.py", "_proofrun_manifest.json",
+        })
+        self.assertEqual((source / "_proofrun_probe.py").read_bytes(), _HARNESS.read_bytes())
+        manifest = json.loads((source / "_proofrun_manifest.json").read_text())
+        result = {
+            "schema_version": "proofrun.probe.v1", "version": "2.8.2", "tests_run": 1,
+            "tests": [{"id": self.expected[0], "status": "pass"}], "integrity_errors": [],
+            **{field: manifest[field] for field in ("source_sha256", "tests_sha256", "harness_sha256")},
+        }
+        transformed = self.transform(result)
+        output = self.extra_output + "\nPROOFRUN_PROBE_RESULT=" + json.dumps(transformed) + "\n"
+        process = Mock(stdout=io.BytesIO(output.encode()))
+        process.wait.return_value = process.poll.return_value = self.code
+        return process
+
+    def check(self, **overrides):
+        values = dict(image=IMAGE_ID, app_path=self.app, tests=[self.test],
+                      expected_test_ids=self.expected, expected_version="2.8.2")
+        values.update(overrides)
+        return run_probe(**values)
+
+    def test_complete_exact_structured_record_is_required_for_pass(self):
+        result = self.check()
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(self.command[-1], "exec python /probe/_proofrun_probe.py")
+        self.assertEqual(parse_probe_result(result.output_tail)["tests_run"], 1)
+
+    def test_service_umask_keeps_private_parent_and_readable_container_inputs(self):
+        def inspect_permissions(command, **kwargs):
+            mount = command[command.index("--mount") + 1]
+            source = Path(mount.split("src=", 1)[1].split(",dst=", 1)[0])
+            self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o755)
+            self.assertEqual(stat.S_IMODE(source.parent.stat().st_mode), 0o700)
+            for staged in source.iterdir():
+                self.assertEqual(stat.S_IMODE(staged.stat().st_mode), 0o644, staged.name)
+            return self.launch(command, **kwargs)
+
+        self.popen.side_effect = inspect_permissions
+        previous = os.umask(0o077)
+        try:
+            self.assertEqual(self.check().status, "pass")
+        finally:
+            os.umask(previous)
+
+    def test_missing_wrong_duplicate_empty_skipped_and_stale_results_are_rejected(self):
+        invalid = [
+            {"tests": []}, {"tests_run": 0}, {"tests_run": True},
+            {"tests": [{"id": "wrong", "status": "pass"}]},
+            {"tests": [{"id": self.expected[0], "status": "pass"}] * 2, "tests_run": 2},
+        ]
+        invalid.extend({"tests": [{"id": self.expected[0], "status": status}]}
+                       for status in ("skip", "expected_failure", "unexpected_success", "incomplete"))
+        invalid.extend([
+            {"version": "1.10.18"}, {"source_sha256": "0" * 64}, {"tests_sha256": {}},
+            {"harness_sha256": "0" * 64}, {"integrity_errors": ["changed"]},
+            {"schema_version": "different"}, {"tests": "invalid"}, {"tests": [{"id": []}]},
+        ])
+        for changes in invalid:
+            with self.subTest(changes=changes):
+                self.transform = lambda result: {**result, **changes}
+                self.assertEqual(self.check().status, "error")
+
+    def test_assertion_failure_is_distinct_from_integrity_error_and_keeps_detail(self):
+        self.code = 1
+        self.transform = lambda result: {
+            **result, "tests": [{"id": self.expected[0], "status": "fail", "detail": "assertion detail"}],
+        }
+        result = self.check()
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(parse_probe_result(result.output_tail)["tests"][0]["detail"], "assertion detail")
+        self.code = 0
+        self.assertEqual(self.check().status, "error")
+
+    def test_multiple_markers_cannot_forge_a_passing_result(self):
+        self.extra_output = 'PROOFRUN_PROBE_RESULT={"schema_version":"proofrun.probe.v1"}\n'
+        self.assertEqual(self.check().status, "error")
+
+    def test_invalid_expectations_never_start_docker(self):
+        for values in ({"expected_test_ids": []}, {"expected_test_ids": self.expected * 2},
+                       {"expected_test_ids": ["bogus"]}, {"expected_test_ids": "test_app.X.test_x"},
+                       {"expected_version": "--bad version"},
+                       {"expected_test_ids": None, "expected_version": "2.8.2"}):
+            with self.subTest(values=values), self.assertRaises(SandboxError):
+                self.check(**values)
+        self.popen.assert_not_called()
+
+    def test_bounded_tail_preserves_long_structured_records_and_rejects_overflow(self):
+        record = {"schema_version": "proofrun.probe.v1", "detail": "trace " * 1500}
+        tail = _ProbeTail()
+        text = "log line\n" * 100 + "PROOFRUN_PROBE_RESULT=" + json.dumps(record) + "\n"
+        for offset in range(0, len(text), 97):
+            tail.add(text[offset:offset + 97])
+        self.assertEqual(parse_probe_result(tail.text()), record)
+        self.assertLess(len(tail.text()), 10_000)
+        tail.add("x" * 140_000 + "\n")
+        self.assertIsNone(parse_probe_result(tail.text()))
+
+
+class MeasuredHarnessTests(unittest.TestCase):
+    """Real local subprocess tests of harness semantics, not pinned Docker proof."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.app = self.root / "app.py"
+        self.app.write_text("def value(): return 1\n")
+        self.harness = self.root / "_proofrun_probe.py"
+        self.harness.write_bytes(_HARNESS.read_bytes())
+        self.test = self.root / "test_measured.py"
+        self.test.write_text("import unittest\nfrom app import value\nclass TestMeasured(unittest.TestCase):\n"
+                             "    def test_value(self): self.assertEqual(value(), 1)\n")
+
+    def execute(self, expected=None, expected_version=None):
+        sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+        manifest = {
+            "expected_test_ids": expected or ["test_measured.TestMeasured.test_value"],
+            "expected_version": expected_version or version("pydantic"),
+            "source_sha256": sha(self.app), "tests_sha256": {self.test.name: sha(self.test)},
+            "harness_sha256": sha(self.harness),
+        }
+        (self.root / "_proofrun_manifest.json").write_text(json.dumps(manifest))
+        process = subprocess.run([sys.executable, "-B", str(self.harness)], cwd=self.root,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
+        return process, parse_probe_result(process.stdout)
+
+    def test_real_success_records_exact_id_count_version_and_hashes(self):
+        process, record = self.execute()
+        self.assertEqual(process.returncode, 0, process.stdout)
+        self.assertEqual(record["tests_run"], 1)
+        self.assertEqual(record["tests"], [{"id": "test_measured.TestMeasured.test_value", "status": "pass"}])
+        self.assertEqual(record["version"], version("pydantic"))
+        self.assertEqual(record["source_sha256"], hashlib.sha256(self.app.read_bytes()).hexdigest())
+
+    def test_real_failure_records_detail_without_forgiving_error(self):
+        self.app.write_text("def value(): raise ValueError('measured failure')\n")
+        process, record = self.execute()
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(record["tests"][0]["status"], "error")
+        self.assertIn("ValueError: measured failure", record["tests"][0]["detail"])
+
+    def test_real_skip_duplicate_wrong_set_zero_and_version_mismatch_do_not_pass(self):
+        original = self.test.read_text()
+        variations = [
+            (original.replace("    def test_value", "    @unittest.skip('no execution')\n    def test_value"), {}),
+            (original + "\ndef load_tests(loader, suite, pattern):\n"
+             "    return unittest.TestSuite([TestMeasured('test_value'), TestMeasured('test_value')])\n", {}),
+            (original, {"expected": ["test_measured.TestMeasured.test_absent"]}),
+            ("import unittest\n", {}),
+            (original, {"expected_version": "0.0.0"}),
+        ]
+        for source, kwargs in variations:
+            with self.subTest(kwargs=kwargs, source=source):
+                self.test.write_text(source)
+                process, record = self.execute(**kwargs)
+                self.assertEqual(process.returncode, 120, process.stdout)
+                self.assertTrue(record["integrity_errors"])
 
 
 if __name__ == "__main__":
