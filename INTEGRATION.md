@@ -2,7 +2,7 @@
 
 ## Current Crusoe decision — September 29, 2026
 
-The user selected OpenRouter primary plus Crusoe serverless inference for the second fixture repair attempt after a rejected first repair, with local Docker verification. This supersedes earlier Crusoe VM-hosting requirements for the hackathon. OpenRouter continues to handle release investigation and failure research. The adapter and main ignored `.env` provider selection are implemented; live Crusoe evidence remains pending key creation and an actual measured run. The existing 76 focused repair/service checks passed, including mocked Crusoe routing, failure and secret-handling checks. See [setup and scope](docs/CRUSOE-INFERENCE.md).
+The user selected OpenRouter primary plus Crusoe serverless inference for the second fixture repair attempt after a rejected first repair, with local Docker verification. This supersedes earlier Crusoe VM-hosting requirements for the hackathon. OpenRouter continues to handle release investigation and failure research. The adapter and main ignored `.env` provider selection are implemented; live Crusoe adapter validation now passed: run `run-c41f21fa99864454b237e689a3c37bd5` used actual DeepSeek V4 Flash inference, passed 14 native Docker repair checks, and returned ten hash-checked artifacts. This direct adapter check is separate from a two-provider retry run. Receipt: `.commit-watch/crusoe-inference/live-acceptance-1/receipt.json`. The existing 76 focused repair/service checks passed, including mocked Crusoe routing, failure and secret-handling checks. See [setup and scope](docs/CRUSOE-INFERENCE.md).
 
 ## Failure research workflow — September 29, 2026
 

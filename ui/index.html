@@ -98,10 +98,11 @@
           <p id="case-summary" class="case-summary"></p>
           <div class="table-wrapper"><table class="comparison-table"><caption class="sr-only">Test results before and after the dependency upgrade</caption><thead><tr><th scope="col">Check</th><th scope="col"><span id="table-old"></span><small>Before</small></th><th scope="col"><span id="table-new"></span><small>After</small></th></tr></thead><tbody id="comparison-body"></tbody></table></div>
           <section class="fix-section" aria-labelledby="fix-title">
-            <div class="section-heading"><h3 id="fix-title">Suggested fix</h3><button class="button secondary compact" id="copy-patch-button">Copy patch</button></div>
+            <div class="section-heading"><h3 id="fix-title">Suggested fix</h3><div class="fix-actions"><button class="button secondary compact" id="copy-patch-button">Copy patch</button><button class="button primary compact" id="create-pr-button" hidden>Create draft PR</button></div></div>
             <p id="fix-description"></p>
             <div class="diff-card"><div class="diff-header"><span id="fix-path"></span><span id="fix-lines"></span></div><div class="diff-code"><div class="diff-line removed"><span aria-label="Remove">−</span><code id="before-code"></code></div><div class="diff-line added"><span aria-label="Add">+</span><code id="after-code"></code></div></div></div>
             <p id="fix-verification" class="fix-note"></p>
+            <p id="pr-status" class="fix-note" hidden><a id="pr-link" target="_blank" rel="noopener noreferrer"></a></p>
           </section>
           <div class="supporting-details">
             <details class="disclosure" id="test-details"><summary>Test output</summary><div id="evidence-list" class="disclosure-content"></div></details>

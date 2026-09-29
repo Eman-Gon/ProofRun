@@ -13,6 +13,7 @@ let lastDemoSignature = '';
 let fetching = false;
 let submitting = false;
 let submittingRepository = false;
+let submittingPr = false;
 let repositorySource = 'mine';
 let ownRepositories = [];
 let repositoriesLoading = false;
@@ -487,6 +488,20 @@ function renderCase() {
     ? '✓ Fix passes on both versions. Your repository is unchanged.'
     : 'Fix has not been verified in this comparison. Your repository is unchanged.';
   $('copy-patch-button').disabled = !item.patch;
+  const publication = item.pullRequest || {};
+  const published = publication.result;
+  $('create-pr-button').hidden = !publication.eligible || Boolean(published);
+  $('create-pr-button').disabled = submittingPr;
+  $('create-pr-button').textContent = submittingPr ? 'Creating draft PR…' : 'Create draft PR';
+  $('create-pr-button').title = publication.reason || '';
+  $('pr-status').hidden = !published;
+  if (published) {
+    $('pr-link').textContent = `Draft PR #${published.number} created ↗`;
+    setLink($('pr-link'), published.url);
+  } else {
+    $('pr-link').textContent = '';
+    $('pr-link').removeAttribute('href');
+  }
   $('scope-copy').textContent = item.scope;
   $('provenance-copy').textContent = item.provenance;
   $('repo-meta').textContent = item.commit ? `Checked commit ${item.commit.slice(0, 7)}` : 'Prepared demo application';
@@ -715,6 +730,36 @@ async function startRun() {
   finally { submitting = false; updateRunPanel(); }
 }
 
+async function createDraftPullRequest() {
+  const item = selectedCase();
+  if (!item?.pullRequest?.eligible || submittingPr) return;
+  const confirmed = window.confirm(
+    'Create a new GitHub branch and draft pull request containing this verified fix?'
+  );
+  if (!confirmed) return;
+  submittingPr = true;
+  lastCaseSignature = '';
+  renderCase();
+  try {
+    const { response, result } = await requestJson('/api/pull-requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrfToken },
+      body: JSON.stringify({ caseId: item.id }),
+    }, 45000);
+    if (!response.ok) throw new Error(result.error || 'Unable to create the draft PR.');
+    item.pullRequest.result = result.pullRequest;
+    lastCaseSignature = '';
+    renderCase();
+    toast(`Draft PR #${result.pullRequest.number} created.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    submittingPr = false;
+    lastCaseSignature = '';
+    renderCase();
+  }
+}
+
 function downloadReport() {
   const item = selectedCase();
   const scan = selectedScan();
@@ -771,6 +816,7 @@ $('copy-patch-button').addEventListener('click', async () => {
     toast('Patch copied.');
   } catch { toast('Clipboard unavailable. Export the report to save the patch.', true); }
 });
+$('create-pr-button').addEventListener('click', createDraftPullRequest);
 renderNavigation();
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 1200);

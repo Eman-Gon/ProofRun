@@ -30,6 +30,10 @@ The collector defaults to requiring an OpenRouter accepted repair. To specifical
 
 ## Validation status
 
-76 focused tests passed across `test_crusoe_repair.py`, `test_proofrun_repair.py` and `test_proofrun_service.py`. Provider transport in these tests is mocked. This establishes routing and validation behavior, not live Crusoe model compatibility, inference or a verified generated repair. Live validation remains pending account key setup. No running worker has been restarted by this change.
+76 focused tests passed across `test_crusoe_repair.py`, `test_proofrun_repair.py` and `test_proofrun_service.py`. Provider transport in these tests is mocked. This establishes routing and validation behavior, not live Crusoe model compatibility, inference or a verified generated repair. Live adapter validation subsequently passed on September 29, 2026: actual Crusoe DeepSeek V4 Flash generated a repair, and native local Docker verification passed all 14 checks. Ten artifacts were hash-checked. This direct adapter check intentionally bypassed primary-provider selection; it does not claim an observed OpenRouter rejection followed by a live Crusoe retry.
+
+Receipt: [live acceptance](../.commit-watch/crusoe-inference/live-acceptance-1/receipt.json). Run ID: `run-c41f21fa99864454b237e689a3c37bd5`. Repeat explicitly after exporting `.env` with `python3.12 scripts/evaluate-crusoe-repair.py --output <new-directory>`. Each invocation can consume inference credits.
 
 Official reference: https://docs.crusoecloud.com/serverless-inference/index.html
+
+The local fixture worker was restarted with the main `.env` after acceptance. Authenticated case discovery passed; `.commit-watch/crusoe-inference/worker-restart.json` records the active provider selection.

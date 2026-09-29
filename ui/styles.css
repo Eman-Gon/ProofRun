@@ -162,6 +162,7 @@ main { min-width: 0; }
 
 .fix-section { margin-bottom: 20px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.fix-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 h3 { font-size: 15px; font-weight: 600; }
 .fix-section > p:not(.fix-note) { margin-bottom: 12px; color: #5a685d; font-size: 13px; }
 .diff-card { overflow: hidden; border: 1px solid var(--line); border-radius: 7px; }

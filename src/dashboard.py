@@ -24,6 +24,7 @@ from dotenv import dotenv_values
 from .public_repo import PublicRepoError, inspect_public_repo, list_public_repositories, normalize_owner, normalize_repository
 from .result_explanation import explain_public_result
 from .demo_ready import load_demo_ready
+from .github_pr import PullRequestError, create_draft, eligible as pr_eligible
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -109,6 +110,7 @@ class Dashboard:
         self.worker = None
         self.repository_scans = []
         self.repository_worker = None
+        self.pull_requests = {}
         self.repository_owner = _repository_owner(self.root)
 
     def report_path(self, case_id):
@@ -193,6 +195,9 @@ class Dashboard:
                     case["sourceUrl"] = source["source_url"]
                 case["provenance"] = "; ".join(filter(None, [_text(source.get("provenance"), 300), _text(report.get("probe_provenance"), 300)])) or "Stored fixture test results; source provenance unavailable."
             case["patch"] = _file_text(path.parent / "suggested-fix.patch")
+        allowed, reason = pr_eligible(self.root, case, path if report else None)
+        case["pullRequest"] = {"eligible": allowed, "reason": reason,
+                               "result": self.pull_requests.get(case_id)}
         required = [".commit-watch/repo-audit/gpu-energy-pandas/" + name for name in ("reproduce.py", "data_collection.py", "fixed_data_collection.py", "test_collection.py")] if gpu else ["src/main.py", "demo/upgrade/app.py", "demo/upgrade/fixed_app.py", "demo/upgrade/requirements-old.txt", "demo/upgrade/requirements-new.txt"]
         if not all((self.root / name).is_file() for name in required):
             case["unavailableReason"] = "The local reproduction files are missing."
@@ -201,6 +206,18 @@ class Dashboard:
         else:
             case["canRun"] = True
         return case
+
+    def create_pull_request(self, case_id):
+        if case_id != "pydantic":
+            return 400, {"error": "A verified fixture repair is required."}
+        case = self.case(case_id)
+        path = self.report_path(case_id)
+        try:
+            result = create_draft(self.root, case, path)
+        except PullRequestError as exc:
+            return 409, {"error": str(exc)}
+        self.pull_requests[case_id] = result
+        return 201, {"pullRequest": result}
 
     def state(self):
         cases = [self.case(case_id) for case_id in CASE_IDS]
@@ -418,7 +435,7 @@ def make_server(root=ROOT, port=8765):
         def do_POST(self):
             if not self._allowed(post=True):
                 return
-            if self.path not in {"/api/runs", "/api/repositories"}:
+            if self.path not in {"/api/runs", "/api/repositories", "/api/pull-requests"}:
                 self._send(404, {"error": "Not found."})
                 return
             token = self.headers.get("X-CSRF-Token", "")
@@ -436,15 +453,22 @@ def make_server(root=ROOT, port=8765):
                 if self.path == "/api/repositories":
                     if set(payload) != {"repository"} or not isinstance(payload["repository"], str):
                         raise ValueError
+                elif self.path == "/api/pull-requests":
+                    if set(payload) != {"caseId"} or not isinstance(payload["caseId"], str):
+                        raise ValueError
                 elif (set(payload) not in ({"caseId"}, {"caseId", "mode"})
                       or not isinstance(payload["caseId"], str) or not isinstance(payload.get("mode", "offline"), str)):
                     raise ValueError
             except (ValueError, OSError):
-                field = "repository" if self.path == "/api/repositories" else "caseId and optional mode"
+                field = "repository" if self.path == "/api/repositories" else "caseId"
+                if self.path == "/api/runs":
+                    field += " and optional mode"
                 self._send(400, {"error": "Expected a small JSON body with " + field + "."})
                 return
             if self.path == "/api/repositories":
                 code, body = dashboard.inspect_repository(payload["repository"])
+            elif self.path == "/api/pull-requests":
+                code, body = dashboard.create_pull_request(payload["caseId"])
             else:
                 code, body = dashboard.start(payload["caseId"], payload.get("mode", "offline"))
             self._send(code, body)
