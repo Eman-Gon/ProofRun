@@ -7,14 +7,17 @@ an observed behavior is a product defect.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import hashlib
 import http.client
 import json
 import math
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from urllib.parse import urlsplit
@@ -24,6 +27,7 @@ from uuid import uuid4
 MAX_BODY = 65_536
 MAX_OUTPUT = 32_768
 MAX_STEPS = 30
+MAX_COLLECTOR_OUTPUT = MAX_STEPS * (MAX_BODY * 6 + 512) + 4096
 _IMAGE = re.compile(r"(?:sha256:|[A-Za-z0-9][A-Za-z0-9._/:@-]*@sha256:)[a-f0-9]{64}\Z")
 _ID = re.compile(r"[a-f0-9]{64}\Z")
 _METHODS = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
@@ -51,11 +55,15 @@ def _remaining(deadline: float, maximum: float = 60) -> float:
     return min(left, maximum)
 
 
-def _docker(args: list[str], deadline: float, *, limit: int = MAX_OUTPUT) -> tuple[int, str]:
+def _docker(args: list[str], deadline: float, *, limit: int = MAX_OUTPUT,
+            input_bytes: bytes | None = None) -> tuple[int, str]:
     """Drain Docker output continuously while retaining only a bounded tail."""
     timeout = _remaining(deadline, 3600)
     try:
-        process = subprocess.Popen(["docker", *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        options = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
+        if input_bytes is not None:
+            options["stdin"] = subprocess.PIPE
+        process = subprocess.Popen(["docker", *args], **options)
     except OSError:
         raise RuntimeFailure("Docker could not be started.") from None
     tail = bytearray()
@@ -71,6 +79,16 @@ def _docker(args: list[str], deadline: float, *, limit: int = MAX_OUTPUT) -> tup
 
     reader = threading.Thread(target=drain, daemon=True)
     reader.start()
+    sender = None
+    if input_bytes is not None:
+        def send():
+            try:
+                process.stdin.write(input_bytes)
+                process.stdin.close()
+            except (OSError, ValueError):
+                pass
+        sender = threading.Thread(target=send, daemon=True)
+        sender.start()
     try:
         code = process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -79,6 +97,8 @@ def _docker(args: list[str], deadline: float, *, limit: int = MAX_OUTPUT) -> tup
         raise DeadlineExceeded("A Docker operation exceeded its time limit.") from None
     finally:
         reader.join(timeout=1)
+        if sender:
+            sender.join(timeout=1)
         if process.stdout:
             process.stdout.close()
     return code, bytes(tail).decode("utf-8", errors="replace")
@@ -156,6 +176,8 @@ def _runtime(snapshot: Path, image: str, runtime: dict, tests: bool) -> tuple[Pa
                    or any(c in v for c in "\x00\r\n") for k, v in env.items())):
         raise RuntimeFailure("Runtime environment must contain bounded non-secret synthetic settings.")
     if not tests:
+        if not isinstance(runtime.get("collector_image"), str) or not _IMAGE.fullmatch(runtime["collector_image"]):
+            raise RuntimeFailure("Configure a separate trusted Python collector image by immutable digest.")
         if type(runtime.get("port")) is not int or not 1024 <= runtime["port"] <= 65535:
             raise RuntimeFailure("Application port must be between 1024 and 65535.")
         _path(runtime.get("health_path"))
@@ -165,61 +187,49 @@ def _runtime(snapshot: Path, image: str, runtime: dict, tests: bool) -> tuple[Pa
     return snapshot, command, "/workspace" + ("/" + workdir if workdir != "." else ""), env
 
 
+def _inspect_image(image: str, deadline: float) -> str:
+    details = json.loads(_checked(["image", "inspect", "--format", "{{json .}}", image], deadline))
+    image_id = details.get("Id", "")
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
+        raise RuntimeFailure("Docker returned an invalid immutable image identity.")
+    if image.startswith("sha256:") and image != image_id:
+        raise RuntimeFailure("Docker resolved a different image from the requested identity.")
+    if (details.get("Config") or {}).get("Volumes"):
+        raise RuntimeFailure("Runtime images must not declare persistent volumes.")
+    image_env = (details.get("Config") or {}).get("Env") or []
+    if any(_SECRET_NAME.search(value.partition("=")[0]) and value.partition("=")[2] for value in image_env):
+        raise RuntimeFailure("The runtime image includes a secret or proxy environment setting.")
+    return image_id
+
+
 @contextmanager
 def _container(snapshot: Path, image: str, runtime: dict, deadline: float, *, tests: bool = False):
     snapshot, command, workdir, env = _runtime(snapshot, image, runtime, tests)
     name = "proofrun-release-" + uuid4().hex
-    network = name + "-network"
-    network_attempted = container_attempted = False
+    container_attempted = False
     try:
-        details = json.loads(_checked(["image", "inspect", "--format", "{{json .}}", image], deadline))
-        image_id = details.get("Id", "")
-        if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
-            raise RuntimeFailure("Docker returned an invalid immutable image identity.")
-        if image.startswith("sha256:") and image != image_id:
-            raise RuntimeFailure("Docker resolved a different image from the requested identity.")
-        if (details.get("Config") or {}).get("Volumes"):
-            raise RuntimeFailure("Runtime images must not declare persistent volumes.")
-        image_env = (details.get("Config") or {}).get("Env") or []
-        if any(_SECRET_NAME.search(value.partition("=")[0]) and value.partition("=")[2] for value in image_env):
-            raise RuntimeFailure("The runtime image includes a secret or proxy environment setting.")
-        if not tests:
-            network_attempted = True
-            _checked(["network", "create", "--internal", network], deadline)
+        image_id = _inspect_image(image, deadline)
         args = ["run", "--detach", "--pull", "never", "--name", name,
-                "--network", "none" if tests else network, "--user", "65534:65534", "--read-only",
+                "--network", "none", "--user", "65534:65534", "--read-only",
                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                 "--pids-limit", "128", "--memory", "512m", "--cpus", "1",
                 "--log-driver", "local", "--log-opt", "max-size=1m", "--log-opt", "max-file=1",
+                "--log-opt", "compress=false",
                 "--mount", f"type=bind,src={snapshot},dst=/workspace,readonly",
                 "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m,mode=1777",
                 "--tmpfs", "/data:rw,noexec,nosuid,size=64m,mode=1777",
                 "--workdir", workdir, "--env", "PYTHONDONTWRITEBYTECODE=1", "--env", "CI=1"]
         for key, value in env.items():
             args.extend(["--env", key + "=" + value])
-        if not tests:
-            args.extend(["--publish", f"127.0.0.1::{runtime['port']}"])
         args.extend(["--entrypoint", command[0], image_id, *command[1:]])
         container_attempted = True
         container_id = _checked(args, deadline)
         if not _ID.fullmatch(container_id):
             raise RuntimeFailure("Docker did not report a valid container identity.")
         environment = {"image_id": image_id, "requested_image": image, "container_id": container_id,
-                       "network": "none" if tests else "internal", "execution_backend": "docker",
-                       "source_mount": "read_only", "evidence_collector": "host_http" if not tests else "docker_exit"}
-        base_url = None
-        if not tests:
-            info = json.loads(_checked(["inspect", "--format", "{{json .}}", container_id], deadline))
-            ports = (info.get("NetworkSettings") or {}).get("Ports", {}).get(f"{runtime['port']}/tcp")
-            if (info.get("Image") != image_id or not isinstance(ports, list) or len(ports) != 1
-                    or ports[0].get("HostIp") != "127.0.0.1"
-                    or not str(ports[0].get("HostPort", "")).isdigit()):
-                raise RuntimeFailure("Container identity or loopback port binding could not be verified.")
-            port = int(ports[0]["HostPort"])
-            if not 1 <= port <= 65535:
-                raise RuntimeFailure("Docker returned an invalid loopback port.")
-            base_url = f"http://127.0.0.1:{port}"
-        yield container_id, environment, base_url
+                       "network": "none", "execution_backend": "docker",
+                       "source_mount": "read_only", "evidence_collector": "isolated_http_sidecar" if not tests else "docker_exit"}
+        yield container_id, environment, None
     except (json.JSONDecodeError, AttributeError, TypeError, KeyError):
         raise RuntimeFailure("Docker returned malformed environment information.") from None
     finally:
@@ -230,14 +240,8 @@ def _container(snapshot: Path, image: str, runtime: dict, deadline: float, *, te
                 cleanup_failed = code != 0
             except RuntimeFailure:
                 cleanup_failed = True
-        if network_attempted:
-            try:
-                code, _ = _docker(["network", "rm", network], time.monotonic() + 5)
-                cleanup_failed = cleanup_failed or code != 0
-            except RuntimeFailure:
-                cleanup_failed = True
         if cleanup_failed:
-            raise RuntimeFailure("Container or network cleanup could not be confirmed.")
+            raise RuntimeFailure("Container cleanup could not be confirmed.")
 
 
 def _redact(value, secrets: tuple[str, ...]):
@@ -253,25 +257,69 @@ def _redact(value, secrets: tuple[str, ...]):
     return value
 
 
+def _addresses(host: str, port: int, deadline: float):
+    """A slow resolver may finish in the background, but can never send a request."""
+    ready = threading.Event()
+    outcome = []
+
+    def resolve():
+        try:
+            outcome.extend(socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)[:16])
+        except OSError:
+            pass
+        finally:
+            ready.set()
+
+    threading.Thread(target=resolve, daemon=True).start()
+    if not ready.wait(_remaining(deadline, 10)):
+        raise DeadlineExceeded("The HTTP request exceeded its time limit.")
+    _remaining(deadline)
+    if not outcome:
+        raise HTTPUnavailable("The HTTP target could not be resolved.")
+    return outcome
+
+
 def _http(base_url: str, step: dict, deadline: float, headers: dict | None = None,
           secrets: tuple[str, ...] = ()) -> dict:
     parsed = urlsplit(base_url)
+    request_deadline = min(deadline, time.monotonic() + 10)
+    addresses = _addresses(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), request_deadline)
     connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
-    connection = connection_type(parsed.hostname, parsed.port, timeout=_remaining(deadline, 10))
+    connection = connection_type(parsed.hostname, parsed.port, timeout=_remaining(request_deadline, 10))
     expired = threading.Event()
+    socket_ref = [None]
+
+    def connect_resolved(_address, timeout=None, source_address=None):
+        for family, socktype, protocol, _, address in addresses:
+            sock = socket.socket(family, socktype, protocol)
+            socket_ref[0] = sock
+            try:
+                sock.settimeout(_remaining(request_deadline, 10))
+                sock.connect(address)
+                return sock
+            except OSError:
+                sock.close()
+            except RuntimeFailure:
+                sock.close()
+                raise
+        raise OSError("connection unavailable")
+
+    connection._create_connection = connect_resolved
 
     def interrupt():
         expired.set()
-        if connection.sock:
+        sock = connection.sock or socket_ref[0]
+        if sock:
             try:
-                connection.sock.shutdown(socket.SHUT_RDWR)
+                sock.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
         connection.close()
 
-    timer = threading.Timer(_remaining(deadline, 10), interrupt)
+    timer = threading.Timer(_remaining(request_deadline, 10), interrupt)
     timer.daemon = True
     timer.start()
+    response = None
     try:
         request_headers = {"Accept": "application/json", **(headers or {})}
         body = None
@@ -279,6 +327,7 @@ def _http(base_url: str, step: dict, deadline: float, headers: dict | None = Non
             body = json.dumps(step["json"], allow_nan=False).encode()
             request_headers["Content-Type"] = "application/json"
         connection.request(step["method"], (parsed.path.rstrip("/") + step["path"]), body=body, headers=request_headers)
+        socket_ref[0] = connection.sock
         response = connection.getresponse()
         if 300 <= response.status < 400:
             raise RuntimeFailure("The target returned a redirect; no redirect was followed.")
@@ -287,7 +336,7 @@ def _http(base_url: str, step: dict, deadline: float, headers: dict | None = Non
             raise RuntimeFailure("The HTTP response exceeds the allowed size or has invalid length.")
         raw = bytearray()
         while True:
-            _remaining(deadline)
+            _remaining(request_deadline)
             chunk = response.read1(min(8192, MAX_BODY + 1 - len(raw)))
             if not chunk:
                 break
@@ -309,12 +358,16 @@ def _http(base_url: str, step: dict, deadline: float, headers: dict | None = Non
     except (socket.timeout, TimeoutError):
         raise DeadlineExceeded("The HTTP request exceeded its time limit.") from None
     except (OSError, http.client.HTTPException, ValueError):
-        if expired.is_set() or time.monotonic() >= deadline:
+        if expired.is_set() or time.monotonic() >= request_deadline:
             raise DeadlineExceeded("The HTTP request exceeded its time limit.") from None
         raise HTTPUnavailable("An HTTP response could not be collected from the target.") from None
     finally:
         timer.cancel()
+        if response is not None:
+            response.close()
         connection.close()
+        if socket_ref[0] is not None:
+            socket_ref[0].close()
 
 
 def _failure(result: dict, exc: RuntimeFailure) -> dict:
@@ -324,27 +377,73 @@ def _failure(result: dict, exc: RuntimeFailure) -> dict:
     return result
 
 
+def _collect(container: str, runtime: dict, steps: list[dict], deadline: float, environment: dict) -> dict:
+    """A trusted process observes HTTP in the application's loopback-only namespace."""
+    image_id = _inspect_image(runtime["collector_image"], deadline)
+    name = "proofrun-collector-" + uuid4().hex
+    started = False
+    try:
+        with tempfile.TemporaryDirectory(prefix="proofrun-http-collector-") as temporary:
+            directory = Path(temporary)
+            directory.chmod(0o755)
+            hashes = {}
+            for filename in ("release_runtime.py", "release_http_collector.py"):
+                target = directory / filename
+                shutil.copyfile(Path(__file__).parent / filename, target)
+                target.chmod(0o644)
+                hashes[filename] = hashlib.sha256(target.read_bytes()).hexdigest()
+            plan = {"port": runtime["port"], "health_path": runtime["health_path"],
+                    "startup_seconds": runtime.get("startup_seconds", 30),
+                    "deadline_seconds": _remaining(deadline, 600), "steps": steps}
+            args = ["run", "--interactive", "--pull", "never", "--name", name,
+                    "--network", "container:" + container, "--user", "65534:65534", "--read-only",
+                    "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                    "--pids-limit", "64", "--memory", "256m", "--cpus", "1",
+                    "--log-driver", "local", "--log-opt", "max-size=1m", "--log-opt", "max-file=1",
+                    "--log-opt", "compress=false",
+                    "--mount", f"type=bind,src={directory},dst=/collector,readonly",
+                    "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m,mode=1777",
+                    "--workdir", "/collector", "--env", "PYTHONDONTWRITEBYTECODE=1",
+                    "--entrypoint", "python", image_id, "/collector/release_http_collector.py"]
+            environment.update(collector_image_id=image_id, collector_code_sha256=hashes)
+            started = True
+            code, output = _docker(args, deadline, limit=MAX_COLLECTOR_OUTPUT,
+                                   input_bytes=(json.dumps(plan, allow_nan=False) + "\n").encode())
+            try:
+                collected = json.loads(output)
+            except (ValueError, RecursionError):
+                raise RuntimeFailure("The trusted HTTP collector returned incomplete evidence.") from None
+            rows = collected.get("observations") if isinstance(collected, dict) else None
+            status = collected.get("execution_status") if isinstance(collected, dict) else None
+            if (not isinstance(rows, list) or len(rows) > len(steps)
+                    or status not in {"completed", "setup_failed", "timed_out"}
+                    or any(not isinstance(row, dict) or type(row.get("status")) is not int
+                           or not 100 <= row["status"] <= 599
+                           or set(row) not in ({"status", "json"}, {"status", "body"})
+                           or ("body" in row and not isinstance(row["body"], str)) for row in rows)):
+                raise RuntimeFailure("The trusted HTTP collector returned invalid observations.")
+            if (status == "completed") != (code == 0 and collected.get("complete") is True and len(rows) == len(steps)):
+                raise RuntimeFailure("The trusted HTTP collector did not establish complete execution.")
+            result = {"execution_status": status, "observations": rows, "complete": status == "completed"}
+            if status != "completed":
+                result["error"] = "The isolated HTTP collection timed out." if status == "timed_out" else "The isolated HTTP collection failed."
+            return result
+    except (json.JSONDecodeError, AttributeError, TypeError, KeyError):
+        raise RuntimeFailure("The trusted HTTP collector could not be configured.") from None
+    finally:
+        if started:
+            code, _ = _docker(["rm", "--force", "--volumes", name], time.monotonic() + 5)
+            if code != 0:
+                raise RuntimeFailure("Collector cleanup could not be confirmed.")
+
+
 def run_probe(snapshot: Path, image: str, runtime: dict, steps: list[dict], deadline: float) -> dict:
     result = {"execution_status": "setup_failed", "observations": [], "environment": {}, "complete": False}
     try:
         steps = _steps(steps)
-        with _container(snapshot, image, runtime, deadline) as (_, environment, base_url):
+        with _container(snapshot, image, runtime, deadline) as (container, environment, _):
             result["environment"] = environment
-            startup_deadline = min(deadline, time.monotonic() + runtime.get("startup_seconds", 30))
-            while True:
-                _remaining(startup_deadline)
-                try:
-                    health = _http(base_url, {"method": "GET", "path": runtime["health_path"]}, startup_deadline)
-                    if 200 <= health["status"] < 300:
-                        break
-                except DeadlineExceeded:
-                    raise
-                except HTTPUnavailable:
-                    pass
-                time.sleep(min(.1, _remaining(startup_deadline)))
-            for step in steps:
-                result["observations"].append(_http(base_url, step, deadline))
-            result.update(execution_status="completed", complete=True)
+            result.update(_collect(container, runtime, steps, deadline, environment))
     except RuntimeFailure as exc:
         _failure(result, exc)
     return result
@@ -417,6 +516,11 @@ def run_staging(staging: dict, steps: list, candidate_revision: str, deadline: f
                                  "revision_checked": True, "evidence_collector": "host_http"}
         for step in steps:
             result["observations"].append(_http(base_url, step, deadline, headers, secrets))
+        final_identity = _http(base_url, {"method": "GET", "path": revision_path}, deadline, headers, secrets)
+        final_revision = final_identity.get("json", {}).get(revision_key) if isinstance(final_identity.get("json"), dict) else None
+        if final_identity["status"] != 200 or final_revision != candidate_revision:
+            raise RuntimeFailure("Staging revision changed during replay; observations cannot establish candidate behavior.")
+        result["environment"]["revision_rechecked"] = True
         result.update(execution_status="completed", complete=True)
     except (ValueError, TypeError):
         _failure(result, RuntimeFailure("The staging configuration is invalid."))

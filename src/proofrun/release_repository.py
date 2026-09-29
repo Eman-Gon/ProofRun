@@ -32,7 +32,7 @@ def git(repo: Path, args: list[str], deadline: float, max_bytes: int = MAX_BYTES
     # Ignore global config/hooks; never run checkout filters, textconv, external diff, or submodules.
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
-               GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
+               GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0", GIT_NO_REPLACE_OBJECTS="1")
     import tempfile
     with tempfile.TemporaryFile() as output:
         try:
@@ -80,7 +80,8 @@ def snapshot(repo: Path, revision: str, destination: Path, deadline: float, patt
         data = git(repo, ["cat-file", "blob", oid], deadline, MAX_FILE)
         file = destination / path
         file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_bytes(data)
+        with file.open("xb") as handle:
+            handle.write(data)
         file.chmod(0o755 if mode == "100755" else 0o644)
         manifest.append({"path": path, "git_blob": oid, "sha256": hashlib.sha256(data).hexdigest(),
                          "bytes": len(data), "mode": mode})
@@ -145,8 +146,10 @@ class SourceTools:
             if not path:
                 return {"changed_paths": changed[:300], "total": len(changed)}
             path = relative_path(path)
+            if path not in before and path not in after:
+                raise ValueError("File is absent or excluded from both pinned snapshots.")
             if path not in changed:
-                return {"path": path, "diff": "No change in included source."}
+                return {"path": path, "diff": "", "unchanged": True}
             texts = [(self.roots[r] / path).read_text(errors="replace").splitlines(True)
                      if path in m else [] for r, m in (("baseline", before), ("candidate", after))]
             diff = "".join(difflib.unified_diff(*texts, fromfile="baseline/" + path, tofile="candidate/" + path))

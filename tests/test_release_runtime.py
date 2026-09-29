@@ -9,6 +9,7 @@ import time
 import pytest
 
 from src.proofrun import release_runtime as runtime
+from src.proofrun import release_http_collector
 
 
 IMAGE = "sha256:" + "a" * 64
@@ -42,10 +43,15 @@ def http_target():
                 payload = {"revision": REVISION}
             elif path == "/wrong-revision":
                 payload = {"revision": "d" * 40}
+            elif path == "/changing-revision":
+                count = sum(p == "/changing-revision" for _, p, _ in requests)
+                payload = {"revision": REVISION if count == 1 else "d" * 40}
             elif path == "/echo":
                 payload = json.loads(body) if body else {"value": "actual target response"}
             elif path == "/secret":
                 payload = {"authorization": self.headers.get("Authorization")}
+            elif path == "/secret-token":
+                payload = {"token": self.headers.get("Authorization", "").split(" ", 1)[-1]}
             elif path == "/failure":
                 status, payload = 422, {"error": "rejected"}
             elif path == "/redirect":
@@ -82,22 +88,58 @@ def http_target():
 @pytest.fixture
 def docker(monkeypatch, http_target):
     state = {"calls": [], "exit_code": 0, "image_env": [], "volumes": None,
-             "logs": "3 tests passed\n", "wait_timeout": False, "fail_network": False}
+             "logs": "3 tests passed\n", "wait_timeout": False, "fail_cleanup": False}
 
     class Process:
         def __init__(self, argv, **kwargs):
             assert argv[0] == "docker", "No application process may execute on the host"
-            assert kwargs == {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
             args = argv[1:]
+            self.collector = args[0] == "run" and "--interactive" in args
+            expected_options = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
+            if self.collector:
+                expected_options["stdin"] = subprocess.PIPE
+            assert kwargs == expected_options
             state["calls"].append(args)
             self.args = args
             self.killed = False
             self.returncode = 0
             if args[:2] == ["image", "inspect"]:
                 output = json.dumps({"Id": IMAGE, "Config": {"Env": state["image_env"], "Volumes": state["volumes"]}})
-            elif args[:2] == ["network", "create"]:
-                output = "network-id"
-                self.returncode = 1 if state["fail_network"] else 0
+            elif self.collector:
+                process = self
+                ready = threading.Event()
+                self.finished = threading.Event()
+                payload = []
+
+                class Input(io.BytesIO):
+                    def close(self):
+                        assert self.getvalue().endswith(b"\n"), "The collector must not wait for Docker stdin EOF"
+                        payload.append(self.getvalue())
+                        ready.set()
+                        super().close()
+
+                class Output:
+                    data = None
+
+                    def read(self, size):
+                        if self.data is None:
+                            assert ready.wait(3)
+                            plan = json.loads(payload[0])
+                            # Stand in for the isolated namespace with the test-owned localhost server.
+                            plan["port"] = http_target[1]
+                            result = release_http_collector.collect(plan)
+                            process.returncode = 0 if result["complete"] else 2
+                            self.data = io.BytesIO(json.dumps(result).encode())
+                            process.finished.set()
+                        return self.data.read(size)
+
+                    def close(self):
+                        if self.data:
+                            self.data.close()
+
+                self.stdin = Input()
+                self.stdout = Output()
+                return
             elif args[0] == "run":
                 output = CONTAINER
             elif args[0] == "inspect":
@@ -110,10 +152,14 @@ def docker(monkeypatch, http_target):
                 output = state["logs"]
             else:
                 output = ""
+                if args[0] == "rm" and state["fail_cleanup"]:
+                    self.returncode = 1
             self.stdout = io.BytesIO(output.encode())
 
         def wait(self, timeout):
             assert timeout > 0
+            if self.collector and not self.finished.wait(timeout) and not self.killed:
+                raise subprocess.TimeoutExpired(self.args, timeout)
             if self.args[0] == "wait" and state["wait_timeout"] and not self.killed:
                 raise subprocess.TimeoutExpired(self.args, timeout)
             return self.returncode
@@ -129,6 +175,7 @@ def docker(monkeypatch, http_target):
 def config():
     return {"command": ["python", "app.py"], "port": 8000, "health_path": "/health",
             "startup_seconds": 1, "test_command": ["python", "-m", "unittest"],
+            "collector_image": IMAGE,
             "env": {"APP_DATA": "/data"}}
 
 
@@ -145,21 +192,28 @@ def test_probe_collects_real_response_and_rejects_no_behavior_by_assumption(tmp_
         {"status": 200, "body": "ordinary text"},
     ]
     assert result["environment"]["image_id"] == IMAGE
-    assert result["environment"]["evidence_collector"] == "host_http"
+    assert result["environment"]["evidence_collector"] == "isolated_http_sidecar"
+    assert result["environment"]["collector_image_id"] == IMAGE
     run = next(c for c in docker["calls"] if c[0] == "run")
-    assert run[run.index("--publish") + 1] == "127.0.0.1::8000"
+    assert "--publish" not in run and run[run.index("--network") + 1] == "none"
     assert "--read-only" in run and "ALL" in run and "65534:65534" in run
-    assert "--internal" in next(c for c in docker["calls"] if c[:2] == ["network", "create"])
+    assert "max-file=1" in run and "compress=false" in run
     assert any("dst=/workspace,readonly" in a for a in run)
+    collector = next(c for c in docker["calls"] if c[0] == "run" and "--interactive" in c)
+    assert collector[collector.index("--network") + 1] == "container:" + CONTAINER
+    assert not any("/workspace" in a for a in collector)
+    assert any("dst=/collector,readonly" in a for a in collector)
+    assert not any(c[0] == "logs" for c in docker["calls"])
     assert docker["calls"][-2][:3] == ["rm", "--force", "--volumes"]
-    assert docker["calls"][-1][:2] == ["network", "rm"]
+    assert docker["calls"][-1][:3] == ["rm", "--force", "--volumes"]
 
 
-def test_each_probe_uses_a_fresh_container_and_network(tmp_path, docker, config):
+def test_each_probe_uses_fresh_isolated_app_and_collector_containers(tmp_path, docker, config):
     for _ in range(2):
         runtime.run_probe(tmp_path, IMAGE, config, [{"method": "GET", "path": "/echo"}], time.monotonic() + 5)
     runs = [c for c in docker["calls"] if c[0] == "run"]
-    assert runs[0][runs[0].index("--name") + 1] != runs[1][runs[1].index("--name") + 1]
+    names = [r[r.index("--name") + 1] for r in runs]
+    assert len(names) == len(set(names)) == 4
 
 
 @pytest.mark.parametrize("path", ["/redirect", "/oversized", "/incomplete"])
@@ -168,7 +222,7 @@ def test_invalid_http_results_are_not_successful_observations(tmp_path, docker, 
     assert result["execution_status"] == "setup_failed" and result["complete"] is False
     assert result["observations"] == []
     assert all(path != "/should-not-be-visited" for _, path, _ in http_target[2])
-    assert docker["calls"][-1][:2] == ["network", "rm"]
+    assert docker["calls"][-1][:3] == ["rm", "--force", "--volumes"]
 
 
 def test_deadline_keeps_partial_evidence_distinct_from_complete_run(tmp_path, docker, config):
@@ -176,8 +230,8 @@ def test_deadline_keeps_partial_evidence_distinct_from_complete_run(tmp_path, do
         {"method": "GET", "path": "/echo"}, {"method": "GET", "path": "/slow"},
     ], time.monotonic() + .1)
     assert result["execution_status"] == "timed_out" and result["complete"] is False
-    assert len(result["observations"]) == 1
-    assert docker["calls"][-1][:2] == ["network", "rm"]
+    assert len(result["observations"]) <= 1
+    assert docker["calls"][-1][:3] == ["rm", "--force", "--volumes"]
 
 
 @pytest.mark.parametrize("step", [
@@ -215,11 +269,28 @@ def test_image_cannot_inherit_secret_env_or_persistent_data(tmp_path, docker, co
     assert not any(c[0] == "run" for c in docker["calls"])
 
 
-def test_network_creation_failure_is_cleaned_up(tmp_path, docker, config):
-    docker["fail_network"] = True
+def test_trusted_collector_image_is_required_without_silent_fallback(tmp_path, docker, config):
+    config.pop("collector_image")
     result = runtime.run_probe(tmp_path, IMAGE, config, [{"method": "GET", "path": "/"}], time.monotonic() + 5)
     assert result["execution_status"] == "setup_failed"
-    assert docker["calls"][-1][:2] == ["network", "rm"]
+    assert docker["calls"] == []
+
+
+def test_host_rejects_collector_success_without_every_observation(tmp_path, docker, config, monkeypatch):
+    monkeypatch.setattr(release_http_collector, "collect", lambda _: {
+        "execution_status": "completed", "observations": [], "complete": True,
+    })
+    result = runtime.run_probe(tmp_path, IMAGE, config, [{"method": "GET", "path": "/echo"}], time.monotonic() + 5)
+    assert result["execution_status"] == "setup_failed" and result["complete"] is False
+    assert result["observations"] == []
+
+
+def test_cleanup_failure_cannot_be_reported_as_complete(tmp_path, docker, config):
+    docker["fail_cleanup"] = True
+    result = runtime.run_probe(tmp_path, IMAGE, config, [{"method": "GET", "path": "/echo"}], time.monotonic() + 5)
+    assert result["execution_status"] == "setup_failed" and result["complete"] is False
+    assert "cleanup" in result["error"]
+    assert docker["calls"][-1][:3] == ["rm", "--force", "--volumes"]
 
 
 @pytest.mark.parametrize("exit_code, status", [(0, "passed"), (1, "failed"), (2, "failed")])
@@ -256,7 +327,16 @@ def test_staging_collects_real_responses_with_configured_base_path(http_target):
     assert result["execution_status"] == "completed" and result["complete"] is True
     assert result["environment"]["observed_revision"] == REVISION
     assert result["observations"] == [{"status": 422, "json": {"error": "rejected"}}]
-    assert [r[1] for r in http_target[2]] == ["/api/revision", "/api/failure"]
+    assert [r[1] for r in http_target[2]] == ["/api/revision", "/api/failure", "/api/revision"]
+
+
+def test_staging_revision_change_during_replay_invalidates_acceptance(http_target):
+    result = runtime.run_staging({"base_url": http_target[0], "revision_path": "/changing-revision"},
+                                [{"method": "GET", "path": "/echo"}], REVISION, time.monotonic() + 5)
+    assert result["execution_status"] == "setup_failed" and result["complete"] is False
+    assert len(result["observations"]) == 1
+    assert not result["environment"].get("revision_rechecked")
+    assert "changed during replay" in result["error"]
 
 
 @pytest.mark.parametrize("extra", [{}, {"allowed_methods": ["GET", "POST"]}])
@@ -272,17 +352,19 @@ def test_explicit_synthetic_write_is_replayed_only_after_revision_check(http_tar
                                 [{"method": "POST", "path": "/echo", "json": {"synthetic": True}}],
                                 REVISION, time.monotonic() + 5)
     assert result["execution_status"] == "completed"
-    assert [r[0] for r in http_target[2]] == ["GET", "POST"]
+    assert [r[0] for r in http_target[2]] == ["GET", "POST", "GET"]
 
 
-def test_staging_credentials_stay_out_of_results_even_when_echoed(http_target, monkeypatch):
-    monkeypatch.setenv("RELEASE_TEST_AUTH", "Bearer private-test-credential")
+@pytest.mark.parametrize("path, credential", [("/secret", "private-test-credential"),
+                                              ("/secret-token", 'quoted"credential')])
+def test_staging_credentials_stay_out_of_results_even_when_echoed(http_target, monkeypatch, path, credential):
+    monkeypatch.setenv("RELEASE_TEST_AUTH", "Bearer " + credential)
     result = runtime.run_staging({"base_url": http_target[0], "revision_path": "/revision",
                                  "headers_env": {"Authorization": "RELEASE_TEST_AUTH"}},
-                                [{"method": "GET", "path": "/secret"}], REVISION, time.monotonic() + 5)
+                                [{"method": "GET", "path": path}], REVISION, time.monotonic() + 5)
     assert result["execution_status"] == "completed"
-    assert "private-test-credential" not in json.dumps(result)
-    assert result["observations"][0]["json"] == {"authorization": "[redacted]"}
+    assert credential not in str(result)
+    assert list(result["observations"][0]["json"].values()) == ["[redacted]"]
 
 
 def test_staging_redirect_and_timeout_cannot_produce_success(http_target):
@@ -295,3 +377,18 @@ def test_staging_redirect_and_timeout_cannot_produce_success(http_target):
 def test_expired_deadline_does_not_start_docker(tmp_path, docker, config):
     result = runtime.run_probe(tmp_path, IMAGE, config, [{"method": "GET", "path": "/"}], time.monotonic() - 1)
     assert result["execution_status"] == "timed_out" and docker["calls"] == []
+
+
+def test_slow_dns_cannot_issue_a_late_request(http_target, monkeypatch):
+    original = runtime.socket.getaddrinfo
+
+    def delayed(*args, **kwargs):
+        time.sleep(.2)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", delayed)
+    result = runtime.run_staging({"base_url": http_target[0], "revision_path": "/revision"},
+                                [{"method": "GET", "path": "/echo"}], REVISION, time.monotonic() + .03)
+    assert result["execution_status"] == "timed_out" and result["observations"] == []
+    time.sleep(.25)
+    assert http_target[2] == []

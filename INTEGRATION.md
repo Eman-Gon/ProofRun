@@ -304,9 +304,9 @@ Person 1 updates this from handoff evidence. Writing documents does not complete
 |---|---|---|
 | DuploCloud round trip | Actual resource/job and returned measured result | IN PROGRESS: email/license verified; local sign-in page reached; Mongo startup, SDK build and portal run pending |
 | Crusoe contribution | VM/worker identity, source revision and execution artifacts | BLOCKED: no authorized VM/project/SSH route supplied |
-| OpenRouter contribution | Actual proposal operation, model provenance and candidate | IN PROGRESS: private key authenticates (HTTP 200); explicit anthropic/claude-sonnet-5 configured; generated proposal pending |
+| OpenRouter contribution | Actual proposal operation, model provenance and candidate | VERIFIED LOCALLY: live anthropic/claude-sonnet-5 proposal, run-8648c92ee14844b8b61769810d459839, attempt 1 |
 | Reproduction | Approved baseline pass and supported update failure | VERIFIED LOCALLY: native 7/7 baseline, 6/7 update with supported omission error |
-| Repair verification | Original suite and independent controls on accepted candidate | VERIFIED LOCALLY for prepared narrow candidate: 14/14; generated candidate pending |
+| Repair verification | Original suite and independent controls on accepted candidate | VERIFIED LOCALLY: live generated candidate passed 14/14 original-suite/control checks; Crusoe execution pending |
 | Bad-fix rejection | Permissive candidate rejected by approved controls | VERIFIED LOCALLY: object-valued nickname rejected in both environments |
 | Evidence integrity | Source/case/environment/candidate binding; stale/empty evidence rejected | LOCAL checks pass; complete hashes and exact cases in artifacts; remote evidence pending |
 | Fresh demonstration | Another teammate can repeat setup/run; failure states and limitations visible | Local API collector and verifier commands pass; portal demonstration pending |
@@ -572,6 +572,38 @@ the worker was started with a different Python installation missing `requests`.
 The worker was corrected to use the tested Python 3.12 interpreter; the failed
 record remains in `.commit-watch/person1-openrouter/20260929T202654Z-d17ce046/`.
 It has no model provenance or passing verdict.
+
+The T7 migration subsequently completed with its owner's byte-comparison and
+healthy-engine confirmation. Docker work resumed after that handoff. The actual
+studio container reaches the authenticated ProofRun registry with HTTP 200;
+receipt: `.commit-watch/person1-duplo-portal/studio-worker-connectivity.json`.
+
+Fresh live repair **succeeded** after Person 3 removed an unsupported optional
+temperature parameter while preserving the explicit model, strict response
+schema, disabled fallbacks, and execution bounds. Its owned repair tests passed
+40 checks. The failed earlier request's exact historical HTTP error was not
+retained, so parameter incompatibility is a diagnosis, not a recovered status.
+
+- Run: `run-8648c92ee14844b8b61769810d459839`.
+- States: `completed` / `regression_reproduced` / `verified`.
+- Actual provider/model: OpenRouter / `anthropic/claude-sonnet-5`; attempt 1;
+  operation `gen-1790715645-zbSuci271zvT6gLk8Pga`.
+- Generated change: `nickname: Optional[str] = None`; candidate SHA256
+  `04c4b567966c615fed857f39f7278d399daa5c990bb77d87388046734759ef13`.
+- Repaired original suites and independent controls: all 14 passed across
+  Pydantic 1.10.18 and 2.8.2. The pre-repair finding remains recorded.
+- All 10 declared artifacts were downloaded and independently size/hash checked.
+- Evidence: `.commit-watch/person1-openrouter/20260929T210037Z-6ccd3c54/`
+  (`collection.json`, `record.json`, and `artifacts/`).
+
+This is fresh local Docker execution of synthetic inputs with a real generated
+proposal. It establishes neither Crusoe hosting nor portal initiation. Those
+separate gates remain incomplete. Backend publication against the actual host
+SDK **passed** with exit 0 and no source fixes: `Duplocloud.AiHelpdesk.Sdk` 1.0.6,
+package commit `45708c38f4baed4088e75181a7ef7de26badba5b`, extracted read-only from
+the running studio image `dev-1.0.6-45708c38`. Three analyzer warnings concern
+async naming and an in-memory synchronous write. Full packaging and deployment
+still require the healthy portal; this compile alone is not a portal run.
 
 
 ## 9. User-selected additions — Similarweb and BAND

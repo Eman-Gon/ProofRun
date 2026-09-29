@@ -34,13 +34,17 @@ def relative_path(value: str) -> str:
 
 
 def validate_target(raw: dict) -> dict:
-    if not isinstance(raw, dict) or not ID.fullmatch(raw.get("id", "")):
+    if not isinstance(raw, dict) or not isinstance(raw.get("id"), str) or not ID.fullmatch(raw["id"]):
         raise ValueError("Each target needs a safe id.")
     target = copy.deepcopy(raw)
     repo = target.get("repository")
     if not isinstance(repo, str) or not Path(repo).is_absolute():
         raise ValueError("Targets require an operator-configured absolute local Git repository.")
     target["name"] = str(target.get("name", target["id"]))[:160]
+    scopes = target.get("workspaces", [])
+    if (not isinstance(scopes, list) or len(scopes) > 100 or any(not isinstance(s, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}", s) for s in scopes)):
+        raise ValueError("Workspace scopes must be a list of exact safe identifiers.")
     images = target.get("images", {})
     if (not isinstance(images, dict) or not images or any(not SHA.fullmatch(k)
             or not isinstance(v, str) or not IMAGE.fullmatch(v) for k, v in images.items())):
@@ -52,7 +56,7 @@ def validate_target(raw: dict) -> dict:
     for req in requirements:
         if not isinstance(req, dict) or set(req) - {"id", "description", "kind", "path_prefix", "methods"}:
             raise ValueError("Invalid requirement fields.")
-        if not ID.fullmatch(req.get("id", "")) or req["id"] in seen:
+        if not isinstance(req.get("id"), str) or not ID.fullmatch(req["id"]) or req["id"] in seen:
             raise ValueError("Requirements need unique safe ids.")
         seen.add(req["id"])
         if req.get("kind") != "preserve_response":
@@ -68,16 +72,25 @@ def validate_target(raw: dict) -> dict:
     runtime = target.get("runtime")
     if not isinstance(runtime, dict):
         raise ValueError("An operator-approved HTTP application runtime is required.")
+    collector = runtime.get("collector_image")
+    if not isinstance(collector, str) or not IMAGE.fullmatch(collector):
+        raise ValueError("Configure a trusted immutable Python image for the independent HTTP collector.")
     for key in ("command", "test_command"):
         argv = runtime.get(key)
         if not isinstance(argv, list) or not argv or any(not isinstance(a, str) or not a for a in argv):
             raise ValueError("Configure application and original-test argv lists.")
-    for key in ("repair_paths", "exclude_paths"):
+    for key in ("repair_paths", "exclude_paths", "test_paths"):
         paths = target.setdefault(key, [])
         if not isinstance(paths, list) or len(paths) > 50:
             raise ValueError("Invalid path configuration.")
         for path in paths:
             relative_path(path)
+    if not target["test_paths"]:
+        raise ValueError("List baseline test paths to preserve across comparison and repair.")
+    pattern = target.get("test_success_pattern")
+    if not isinstance(pattern, str) or not 1 <= len(pattern) <= 256:
+        raise ValueError("Configure an original-suite completion marker proving nonzero tests ran.")
+    re.compile(pattern)
     if target.get("staging") is not None and not isinstance(target["staging"], dict):
         raise ValueError("Staging must be operator configured.")
     target["contract_hash"] = digest(raw)
@@ -110,7 +123,7 @@ def validate_request(raw: dict, targets: dict) -> dict:
             "benefit", "budget_seconds", "repair", "event_id"}:
         raise ValueError("Unsupported release request fields.")
     request = copy.deepcopy(raw)
-    if request.get("target_id") not in targets:
+    if not isinstance(request.get("target_id"), str) or request["target_id"] not in targets:
         raise ValueError("Select a registered repository target.")
     target = targets[request["target_id"]]
     for key in ("baseline_revision", "candidate_revision"):

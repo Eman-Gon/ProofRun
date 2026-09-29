@@ -10,7 +10,7 @@ namespace Duplo.Extension.ProofRun;
 [ApiController]
 [Route("v1/aiservicedesk/user/data/workspaces/{workspaceId}/environment/extensions/proofruns")]
 [AccessControl(Parent = typeof(Workspace), ParentIdProperty = "OwnerWorkspaceId")]
-public class ProofRunController : ResourcesController<ProofRunVerification, ProofRunSpec, ProofRunResult>
+public partial class ProofRunController : ResourcesController<ProofRunVerification, ProofRunSpec, ProofRunResult>
 {
     private readonly ProofRunService _service;
 

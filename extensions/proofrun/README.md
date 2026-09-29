@@ -1,6 +1,6 @@
 # ProofRun DuploCloud extension
 
-This is a C# `ResourceWorkerBase` extension and Angular Native Federation remote based on the official DevKit worker sample. **It has not yet been built against a running DuploCloud SDK or exercised in the portal.** Local work-email/license/model setup must be completed before that gate can pass.
+This is a C# `ResourceWorkerBase` extension and Angular Native Federation remote based on the official DevKit worker sample. **The backend compiles against the actual host SDK 1.0.6. Full packaging, deployment and portal execution remain pending.** Email/license setup and private OpenRouter configuration have completed; the remaining portal startup issue is MongoDB's local binary crash.
 
 The **Run verification** button creates one workspace-scoped `ProofRunVerification` resource. Its worker obtains the approved `customer-nickname-v1` submission, binds a stable job key to the workspace/resource identity, persists that exact request, submits it to the Python worker and polls the measured result. The UI displays independent execution, finding and repair states, actual case records, provenance and artifact downloads. Comparison-only is the default. The optional **Request generated repair** checkbox enables at most two attempts using the worker's configured model; unavailable model access never falls back to a prepared candidate. Prepared fixed-code evidence remains a prepared example; it cannot establish generated repair or complete verification.
 
@@ -110,6 +110,12 @@ Checks actually run on September 29, 2026 (uncommitted extension changes on Proo
 | Shell syntax / whitespace | Passed `bash -n` for both scripts and `git diff --check`. |
 
 Nonsecret local receipts are at `evidence/client-round-trips.json` (ignored). Worker evidence is at the ProofRun repository's `.commit-watch/proofrun/<run_id>/published/`. These are actual local executions of synthetic fixtures, not Crusoe evidence.
+
+Subsequent checks on September 29, 2026, base `41fd0b6` plus current uncommitted changes:
+
+- Actual SDK backend publish passed with zero errors and three analyzer warnings. All ten SDK packages are 1.0.6, extracted read-only from the running studio image `dev-1.0.6-45708c38`; the package repository commit matches `45708c38f4baed4088e75181a7ef7de26badba5b`. `evidence/host-sdk-build.json` records source and DLL hashes. No SDK source fix was required.
+- The actual studio container reached the authenticated Python worker registry with HTTP 200; `.commit-watch/person1-duplo-portal/studio-worker-connectivity.json` records the route and host image.
+- Real OpenRouter repair run `run-8648c92ee14844b8b61769810d459839` completed / regression_reproduced / verified. The first generated `anthropic/claude-sonnet-5` proposal passed all 14 repaired original-suite/control checks; all ten artifact downloads matched their hashes and sizes. Evidence is `.commit-watch/person1-openrouter/20260929T210037Z-6ccd3c54/`. This API run was local and was not initiated through the portal.
 
 The copied official sample lock initially reported 8 moderate and 2 high npm advisories. Six targeted transitive updates removed both high advisories and four moderate advisories. The final `npm audit` still reports **4 moderate advisories** in the Angular 22.1.0 dependency chain (`@angular/common`, `@angular/forms`, `@angular/platform-browser`, `@angular/router`, originating from `HttpTransferCache`). A coordinated Angular 22.1.1 update encountered strict peer resolution errors; the official sample's Angular versions were preserved without `--force` or `--legacy-peer-deps`. The remaining Angular update needs validation with the actual host. The full audit output is saved locally at `frontend/npm-audit.local.json` (ignored).
 

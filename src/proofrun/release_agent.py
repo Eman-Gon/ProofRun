@@ -24,7 +24,7 @@ from typing import Callable
 
 from .config import ConfigurationError, RepairConfig
 from .contracts import ProposalUnavailable
-from .repair import MAX_RESPONSE_BYTES, _json, _load_json, _read_response
+from .repair import MAX_RESPONSE_BYTES, _CHILD_ERRORS, _json, _load_json, _read_response
 
 MAX_CONTEXT_BYTES = 32_768
 MAX_ACTION_BYTES = 32_768
@@ -35,6 +35,22 @@ DEFAULT_TOOL_LIMIT = 30
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/~-]{0,191}\Z")
 _SENSITIVE_KEY = re.compile(r"api[_-]?key|authorization|access[_-]?token|worker[_-]?token|password|secret", re.I)
 _CREDENTIAL = re.compile(r"sk-or-v1-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._~+/-]{12,}", re.I)
+_PROVIDER_FAILURES = {
+    "OpenRouter rejected the bounded request or model parameters.": ("request_rejected", 400),
+    "OpenRouter authentication failed; check OPENROUTER_API_KEY.": ("authentication_failed", 401),
+    "OpenRouter credit or key spending limit is unavailable.": ("credit_unavailable", 402),
+    "OpenRouter denied access to the selected model or request.": ("access_denied", 403),
+    "The selected OpenRouter model or endpoint is unavailable.": ("model_or_endpoint_unavailable", 404),
+    "OpenRouter request timed out.": ("provider_timeout", 408),
+    "OpenRouter rate limit reached; no automatic retry was made.": ("rate_limited", 429),
+    "OpenRouter service is unavailable or returned an unexpected HTTP status.": ("provider_unavailable", None),
+    "OpenRouter request exceeded its time limit.": ("provider_timeout", None),
+    "OpenRouter response exceeds the repair size limit.": ("response_too_large", None),
+    "OpenRouter request timed out; no automatic retry was made.": ("provider_timeout", None),
+    "OpenRouter connection failed; no automatic retry was made.": ("connection_failed", None),
+}
+_FAILURE_CODES = {value[0] for value in _PROVIDER_FAILURES.values()}
+_FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "function_call", "error"}
 
 SYSTEM = """You investigate a release of a runnable product within an approved budget.
 Choose one experiment at a time from the observations returned by the runtime.
@@ -196,6 +212,18 @@ def _public_provenance(value, *, injected=False):
             if not isinstance(item, str) or not _IDENTIFIER.fullmatch(item):
                 raise ValueError("Invalid model provenance")
             result[key] = item
+    if "error_code" in value:
+        if value["error_code"] not in _FAILURE_CODES:
+            raise ValueError("Invalid provider failure code")
+        result["error_code"] = value["error_code"]
+    if "http_status" in value:
+        if type(value["http_status"]) is not int or not 100 <= value["http_status"] <= 599:
+            raise ValueError("Invalid provider status")
+        result["http_status"] = value["http_status"]
+    if "finish_reason" in value:
+        if value["finish_reason"] not in _FINISH_REASONS:
+            raise ValueError("Invalid model finish reason")
+        result["finish_reason"] = value["finish_reason"]
     result.update(mode="injected" if injected else "live", gateway="injected" if injected else "openrouter")
     return result
 
@@ -203,7 +231,9 @@ def _public_provenance(value, *, injected=False):
 def _live_model(config: RepairConfig, messages: list[dict], timeout: float) -> dict:
     body = {
         "model": config.model, "messages": messages, "stream": False,
-        "max_tokens": config.max_tokens, "temperature": 0,
+        "max_tokens": config.max_tokens,
+        # Requiring an optional sampling parameter can exclude otherwise
+        # compatible providers for the explicitly configured model.
         "provider": {"allow_fallbacks": False, "require_parameters": True},
         "response_format": {"type": "json_object"},
     }
@@ -226,6 +256,13 @@ def _live_model(config: RepairConfig, messages: list[dict], timeout: float) -> d
         if result.returncode or len(result.stdout) > MAX_RESPONSE_BYTES * 2:
             raise ValueError()
         wrapper = _load_json(result.stdout.decode())
+        if isinstance(wrapper, dict) and set(wrapper) == {"error"} and wrapper["error"] in _PROVIDER_FAILURES:
+            message = wrapper["error"]
+            code, status = _PROVIDER_FAILURES[message]
+            provenance["error_code"] = code
+            if status is not None:
+                provenance["http_status"] = status
+            raise _ModelFailure("model_unavailable", message, provenance)
         if not isinstance(wrapper, dict) or set(wrapper) != {"response"}:
             raise ValueError()
         raw = base64.b64decode(wrapper["response"], validate=True)
@@ -250,11 +287,16 @@ def _live_model(config: RepairConfig, messages: list[dict], timeout: float) -> d
         if not isinstance(choices, list) or len(choices) != 1:
             raise ValueError()
         choice = choices[0]
+        finish_reason = choice.get("finish_reason")
+        if isinstance(finish_reason, str) and finish_reason in _FINISH_REASONS:
+            provenance["finish_reason"] = finish_reason
         message = choice.get("message")
         if not isinstance(message, dict):
             raise ValueError()
         if message.get("refusal") or choice.get("finish_reason") == "content_filter":
             raise _ModelFailure("model_unavailable", "The selected model declined the investigation.", provenance)
+        if finish_reason == "length":
+            raise _ModelFailure("failed", "Model decision reached the output limit and was discarded.", provenance)
         if choice.get("finish_reason") != "stop" or message.get("tool_calls"):
             raise ValueError()
         content = message.get("content")
@@ -273,6 +315,12 @@ def _http_child():
         config = RepairConfig(payload["api_key"], payload["model"], payload["timeout_seconds"], payload["max_tokens"])
         raw = _read_response(config, payload["body"])
         result = {"response": base64.b64encode(raw).decode()}
+    except ProposalUnavailable as exc:
+        # The transport already maps failures to fixed local messages. Never
+        # carry arbitrary provider bodies or exception strings across stdout.
+        message = str(exc)
+        result = {"error": message if message in _CHILD_ERRORS and message in _PROVIDER_FAILURES
+                  else "OpenRouter connection failed; no automatic retry was made."}
     except Exception:
         result = {"error": "model_unavailable"}
     sys.stdout.write(_json(result))
@@ -403,6 +451,10 @@ def investigate(context: dict, tools: Callable[[str, dict], dict], deadline: flo
                 result = {"truncated": True, "original_bytes": len(result_bytes), "sha256": _sha(result_bytes),
                           "notice": "Tool result exceeded the observation budget; narrow the next query.",
                           "preview": result_bytes[:MAX_RESULT_BYTES - 1024].decode("utf-8", errors="ignore")}
+                # Escaping a JSON preview can enlarge it; bound the serialized
+                # observation as well as the original UTF-8 excerpt.
+                while len(_json(result).encode()) > MAX_RESULT_BYTES:
+                    result["preview"] = result["preview"][:len(result["preview"]) // 2]
             else:
                 result = _load_json(encoded)
             event({"type": "tool_result", "step": steps, "tool": action["tool"], "result": result})

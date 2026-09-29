@@ -1,0 +1,47 @@
+{
+  "targets": [
+    {
+      "id": "customer-service",
+      "name": "Customer service — configuration example",
+      "repository": "/srv/proofrun/repos/customer-service.git",
+      "workspaces": ["example-workspace"],
+      "images": {
+        "0000000000000000000000000000000000000000": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "1111111111111111111111111111111111111111": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "requirements": [
+        {
+          "id": "customer-read-compatibility",
+          "description": "Preserve the HTTP status and response body for supported synthetic customer lookup and listing requests.",
+          "kind": "preserve_response",
+          "path_prefix": "/customers",
+          "methods": ["GET", "HEAD"]
+        },
+        {
+          "id": "customer-write-compatibility",
+          "description": "Preserve the HTTP status and response body for synthetic customer creation and validation requests in the isolated test application.",
+          "kind": "preserve_response",
+          "path_prefix": "/customers",
+          "methods": ["POST"]
+        }
+      ],
+      "runtime": {
+        "collector_image": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "command": ["python", "-m", "customer_service", "--host", "0.0.0.0", "--port", "8080"],
+        "test_command": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+        "workdir": ".",
+        "port": 8080,
+        "health_path": "/health",
+        "startup_seconds": 30,
+        "env": {
+          "APP_ENV": "proofrun",
+          "DATA_DIR": "/data"
+        }
+      },
+      "test_paths": ["tests/*"],
+      "test_success_pattern": "(?m)^Ran [1-9][0-9]* tests? in [0-9.]+s$",
+      "repair_paths": ["customer_service/*.py"],
+      "exclude_paths": ["docs/private/*", "tests/integration/*", "data/*"]
+    }
+  ]
+}

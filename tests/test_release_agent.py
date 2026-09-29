@@ -1,6 +1,7 @@
 """Synthetic adaptive-loop tests; no provider access or application verdict proof."""
 import base64
 import copy
+import io
 import json
 import os
 import subprocess
@@ -11,6 +12,7 @@ from unittest.mock import Mock, patch
 
 from src.proofrun import release_agent as agent
 from src.proofrun.config import RepairConfig
+from src.proofrun.contracts import ProposalUnavailable
 
 
 KEY = "sk-or-v1-synthetic-private-credential-12345"
@@ -228,6 +230,15 @@ class ReleaseAgentTests(unittest.TestCase):
         result = self.run_agent(model, Mock(return_value={"content": "x" * 12_000}))
         self.assertEqual(result["status"], "completed")
 
+    def test_escaping_cannot_expand_truncated_observation_past_budget(self):
+        events = []
+        responses = iter([reply(action("diff", {})), reply()])
+        result = self.run_agent(lambda *_: next(responses), Mock(return_value={"content": '\\"' * 30_000}), events=events)
+        observed = next(event["result"] for event in events if event["type"] == "tool_result")
+        self.assertTrue(observed["truncated"])
+        self.assertLessEqual(len(agent._json(observed).encode()), agent.MAX_RESULT_BYTES)
+        self.assertEqual(result["status"], "completed")
+
     def test_credentials_are_absent_from_prompt_events_and_result(self):
         events, calls = [], []
         worker_secret = "private-worker-credential-123456789"
@@ -287,6 +298,7 @@ class ReleaseProviderTests(unittest.TestCase):
         payload = json.loads(kwargs["input"])
         self.assertEqual(payload["body"]["model"], MODEL)
         self.assertFalse(payload["body"]["provider"]["allow_fallbacks"])
+        self.assertNotIn("temperature", payload["body"])
         self.assertEqual(kwargs["env"], {})
         self.assertLessEqual(kwargs["timeout"], 5)
         self.assertNotIn(KEY, json.dumps(args))
@@ -318,12 +330,45 @@ class ReleaseProviderTests(unittest.TestCase):
                 self.assertNotIn("private-provider-body", json.dumps(result))
                 self.assertNotIn("Private provider refusal text", json.dumps(result))
 
+    def test_allowlisted_http_failure_retains_safe_reason_status_and_code(self):
+        for message, code, status in (
+            ("OpenRouter authentication failed; check OPENROUTER_API_KEY.", "authentication_failed", 401),
+            ("The selected OpenRouter model or endpoint is unavailable.", "model_or_endpoint_unavailable", 404),
+            ("OpenRouter rate limit reached; no automatic retry was made.", "rate_limited", 429),
+        ):
+            with self.subTest(status=status):
+                process = Mock(return_value=SimpleNamespace(returncode=0, stdout=json.dumps({"error": message}).encode()))
+                events = []
+                result = self.live(process, events=events)
+                self.assertEqual(result["status"], "model_unavailable")
+                self.assertEqual(result["summary"], message)
+                self.assertEqual(result["provenance"][0]["http_status"], status)
+                self.assertEqual(result["provenance"][0]["error_code"], code)
+                event = next(item for item in events if item["type"] == "model_call")
+                self.assertEqual(event["http_status"], status)
+                self.assertNotIn(KEY, json.dumps([result, events]))
+
+    def test_http_child_exports_only_fixed_local_failure_messages(self):
+        payload = {"api_key": KEY, "model": MODEL, "timeout_seconds": 5, "max_tokens": 256, "body": {}}
+        for message in ("OpenRouter authentication failed; check OPENROUTER_API_KEY.", "untrusted provider error " + KEY):
+            output = io.StringIO()
+            with patch.object(agent.sys, "stdin", SimpleNamespace(buffer=io.BytesIO(json.dumps(payload).encode()))), \
+                    patch.object(agent.sys, "stdout", output), \
+                    patch.object(agent, "_read_response", side_effect=ProposalUnavailable(message)):
+                agent._http_child()
+            result = json.loads(output.getvalue())
+            self.assertIn(result["error"], agent._PROVIDER_FAILURES)
+            self.assertNotIn(KEY, output.getvalue())
+            self.assertNotIn("untrusted provider error", output.getvalue())
+
     def test_truncated_completion_never_executes_partial_action(self):
         truncated = completion()
         truncated["choices"][0]["finish_reason"] = "length"
         result = self.live(Mock(return_value=process_response(truncated)))
         self.assertEqual(result["status"], "failed")
         self.assertEqual(result["provenance"][0]["operation_id"], "gen-synthetic-001")
+        self.assertEqual(result["provenance"][0]["finish_reason"], "length")
+        self.assertIn("output limit", result["summary"])
 
     def test_malformed_or_missing_provenance_fails(self):
         invalid = completion()

@@ -26,6 +26,7 @@ interface ResearchSession {
           <div class="eyebrow">Release check · Customer import</div>
           <h1>ProofRun</h1>
           <p>Client meeting in 20 minutes. Check the import behavior you plan to demonstrate.</p>
+          <button type="button" (click)="openReleaseInvestigation()">Investigate a repository release →</button>
         </div>
         <div class="run-options">
           <button type="button" class="run-button" (click)="start()" [disabled]="starting()">
@@ -273,6 +274,11 @@ export class ProofRunComponent implements OnInit {
   protected select(id: string): void {
     const fromView = !!this.route.snapshot.params['id'];
     this.router.navigate([...(fromView ? ['../..'] : []), 'view', id], { relativeTo: this.route });
+  }
+
+  protected openReleaseInvestigation(): void {
+    const fromView = !!this.route.snapshot.params['id'];
+    this.router.navigate([...(fromView ? ['../..'] : []), 'releases'], { relativeTo: this.route });
   }
 
   protected refreshSelected(): void {
