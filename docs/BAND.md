@@ -1,9 +1,17 @@
 # BAND proposer and verifier handoff
 
-The optional BAND path is implemented and off by default. Offline transport and
-SDK compatibility tests exercise it. **A live BAND handoff has not been run.**
-Agent credentials and an existing room are still required. Mocked room delivery
-does not establish a sponsor integration.
+The optional BAND path is off by default in example configuration. On September
+29, 2026, a fresh OpenRouter-generated repair completed a live BAND round trip,
+passed all 14 native Docker repair checks, and produced 11 hash-checked artifacts.
+The main local `.env` and `.env.integrations` now enable BAND. Worker processes
+must load those settings at startup; editing the files does not update an
+already running worker. Credentials and an existing room are still required.
+
+Evidence: `.commit-watch/band-fix-20260929/live-openrouter/receipt.json` and
+`run.json`, run `run-7fdecbb652404432aead0d43e4daa897`. This checks the registered
+synthetic fixture with local Docker, not a browser-initiated or deployed-worker
+round trip. Live blocked-candidate and disconnect scenarios remain separate
+acceptance checks; those failure paths are covered by offline tests.
 
 ## What runs
 
@@ -96,6 +104,13 @@ exact bounded JSON contents must match. Worker-local artifact paths, raw logs,
 model rationale and secrets are not sent. SDK logs that may contain private
 headers or WebSocket query strings are suppressed while the sessions are open;
 public failures use a fixed safe message.
+
+BAND renders a leading `@[[recipient-agent-id]] ` into delivered message text.
+After checking routing metadata, the SDK adapter removes only the exact prefix
+for the receiving identity. Plain JSON delivery is also supported. The strict
+decoder still rejects other prefixes, trailing text, duplicate JSON keys and
+non-finite numbers, and the decoded candidate or result must match the expected
+payload. The wire-size limit is checked before removing the mention.
 
 ## Checks and live acceptance
 

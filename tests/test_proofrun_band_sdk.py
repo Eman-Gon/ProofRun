@@ -11,7 +11,7 @@ pytest.importorskip("band", reason="Install requirements-band.txt to exercise th
 from band.client.rest import ChatMessageRequest, ChatEventRequest
 from band.client.streaming import MessageCreatedPayload
 from band.platform.event import MessageEvent, ReconnectedEvent
-from src.proofrun.band import BandConfig, BandUnavailable
+from src.proofrun.band import BandConfig, BandHandoff, BandUnavailable, _decode, MAX_MESSAGE_BYTES
 from src.proofrun.band_sdk import SdkTransport, REQUEST_OPTIONS, REST_URL, WS_URL
 
 
@@ -29,8 +29,8 @@ def config():
                       str(uuid4()), "synthetic-verifier-key")
 
 
-@pytest.fixture
-def sdk(monkeypatch, config):
+@pytest.fixture(params=[False, True], ids=["plain", "rendered-mention"])
+def sdk(monkeypatch, config, request):
     instances = []
     sent, marked, events = [], [], []
 
@@ -58,7 +58,9 @@ def sdk(monkeypatch, config):
                 sent.append(message)
                 identity = str(uuid4())
                 payload = MessageCreatedPayload(
-                    id=identity, content=message.content, message_type="text", sender_id=agent_id,
+                    id=identity,
+                    content=(f"@[[{message.mentions[0].id}]] " if request.param else "") + message.content,
+                    message_type="text", sender_id=agent_id,
                     sender_type="Agent", chat_room_id=chat_id,
                     metadata={"mentions": [{"id": m.id} for m in message.mentions]},
                     inserted_at="2026-09-29T00:00:00Z", updated_at="2026-09-29T00:00:00Z")
@@ -120,6 +122,7 @@ def test_sdk_uses_two_identities_ws_receive_mentions_and_lifecycle(sdk, config):
             identity = await transport.send("proposer", '{"synthetic":"request"}')
             received = await asyncio.wait_for(transport.receive("verifier"), 1)
             assert received.id == identity
+            assert received.content == '{"synthetic":"request"}'
             assert received.sender_id == config.proposer_agent_id
             assert sdk.sent[0].mentions[0].id == config.verifier_agent_id
             assert all(link.subscribed == config.room_id for link in sdk.instances)
@@ -130,6 +133,61 @@ def test_sdk_uses_two_identities_ws_receive_mentions_and_lifecycle(sdk, config):
         finally:
             await transport.close()
         assert all(not link.is_connected for link in sdk.instances)
+    asyncio.run(run())
+
+
+def test_sdk_full_repair_handoff(sdk, config):
+    import test_proofrun_service as support
+    fixture = support.ProofRunServiceTests()
+    fixture.setUp()
+    try:
+        record = fixture.execute(fixture.service(band_handoff=BandHandoff(config)), repair=True)
+        assert record["repair_status"] == "verified"
+        assert record["coordination"]["status"] == "passed"
+        assert len(sdk.sent) == 2
+        assert len(sdk.marked) == 4
+    finally:
+        fixture.doCleanups()
+
+
+@pytest.mark.parametrize("invalid", [
+    'unexpected {"ok":true}',
+    '@[[00000000-0000-0000-0000-000000000000]] {"ok":true}',
+    '{"ok":true} trailing',
+    '{"ok":true,"ok":false}',
+    '{"ok":NaN}',
+    '[]',
+])
+def test_sdk_normalization_keeps_invalid_payloads_invalid(sdk, config, invalid):
+    async def run():
+        transport = SdkTransport(config)
+        try:
+            await transport.open()
+            await transport.send("proposer", invalid)
+            received = await asyncio.wait_for(transport.receive("verifier"), 1)
+            assert received.content == invalid
+            with pytest.raises(BandUnavailable):
+                _decode(received.content)
+        finally:
+            await transport.close()
+    asyncio.run(run())
+
+
+def test_wire_size_limit_applies_before_normalization(sdk, config):
+    async def run():
+        transport = SdkTransport(config)
+        try:
+            await transport.open()
+            payload = MessageCreatedPayload(
+                id=str(uuid4()), content=f"@[[{config.verifier_agent_id}]] " + "x" * MAX_MESSAGE_BYTES,
+                message_type="text", sender_id=config.proposer_agent_id, sender_type="Agent",
+                chat_room_id=config.room_id, metadata={"mentions": [{"id": config.verifier_agent_id}]},
+                inserted_at="2026-09-29T00:00:00Z", updated_at="2026-09-29T00:00:00Z")
+            await sdk.instances[1].queue.put(MessageEvent(room_id=config.room_id, payload=payload))
+            with pytest.raises(BandUnavailable):
+                await asyncio.wait_for(transport.receive("verifier"), 1)
+        finally:
+            await transport.close()
     asyncio.run(run())
 
 

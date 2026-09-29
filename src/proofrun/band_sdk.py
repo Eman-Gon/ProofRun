@@ -94,8 +94,13 @@ class SdkTransport:
                     continue
                 if not _uuid(payload.id) or len(payload.content.encode()) > MAX_MESSAGE_BYTES:
                     raise BandUnavailable()
+                # BAND renders the routing mention into delivered text. Remove
+                # only this recipient's exact leading envelope; the handoff's
+                # strict JSON decoder still rejects any other prefix or suffix.
+                prefix = f"@[[{self.links[role].agent_id}]] "
+                content = payload.content.removeprefix(prefix)
                 self.queues[role].put_nowait(RoomMessage(payload.id, event.room_id,
-                                                       payload.sender_id, payload.content))
+                                                       payload.sender_id, content))
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -336,7 +336,7 @@ Person 1 updates this from handoff evidence. Writing documents does not complete
 
 | Gate | Required evidence | Status |
 |---|---|---|
-| DuploCloud round trip | Actual resource/job and returned measured result | API PATH VERIFIED LOCALLY: actual SDK 1.0.6 bundle deployed as 0.1.0; resource 6abc29855171566ca109a335 completed comparison with four verified artifacts. Browser initiation/display pending. |
+| DuploCloud round trip | Actual resource/job and returned measured result | API PATH VERIFIED LOCALLY: actual SDK 1.0.6 bundle now deployed as 0.2.1; resource 6abc29855171566ca109a335 completed comparison with four verified artifacts. Fixture/release graph proxy responses verified. Browser initiation/display pending. |
 | Crusoe contribution | VM/worker identity, source revision and execution artifacts | BLOCKED: no authorized VM/project/SSH route supplied |
 | OpenRouter contribution | Actual proposal operation, model provenance and candidate | VERIFIED LOCALLY: live anthropic/claude-sonnet-5 proposal, run-8648c92ee14844b8b61769810d459839, attempt 1 |
 | Reproduction | Approved baseline pass and supported update failure | VERIFIED LOCALLY: native 7/7 baseline, 6/7 update with supported omission error |
@@ -995,13 +995,21 @@ hosting/evidence; local success does not satisfy that gate.
 
 ### Per-fix Neo4j graph handoff — extension 0.2.1
 
-The graph owner is preparing the 0.2.1 extension handoff with embedded evidence
-graphs in fixture results and each release finding. The local dashboard also
-shows a graph below each suggested fix, including separately labeled unverified
-graphs for static findings. The owner reports that node selection and keyboard
-interaction were visually checked in the local dashboard. Final refined-bundle
-deployment, portal rendering and restart receipts are pending this handoff;
-do not infer them from the implementation or worker results below.
+Extension **0.2.1 is deployed** against the actual SDK 1.0.6 with embedded
+evidence graphs in fixture results and each release finding. The local dashboard
+also shows a graph below each suggested fix, including separately labeled
+unverified graphs for static findings. The graph owner visually checked node
+selection and keyboard interaction in the local dashboard. Portal rendering and
+a visible button-triggered run remain pending user sign-in.
+
+The deployed bundle is 1,952,154 bytes with SHA-256
+`85ff545718d7a5e0a4cb48a71a1899245ede4e1f7b4eda6df55c14653094e211`.
+The host reported loaded version 0.2.1 and served its remote entry and graph
+frontend asset with HTTP 200. Person 1 independently verified the bundle hash
+and size, matched its remote entry to the local build, and passed the official
+Native Federation checker against the running host. Receipts are
+`.commit-watch/neo4j-graphs/extension-deployment.json` and
+`.commit-watch/neo4j-graphs/person1-verification.json`.
 
 The additive graph interface is `proofrun.evidence-graph.v1`, with authenticated
 `GET /v1/runs/{run_id}/graph` and `GET /v1/release-runs/{run_id}/graph`. The
@@ -1019,10 +1027,27 @@ Measured live Aura graph responses under `.commit-watch/neo4j/per-fix-graphs/`:
 - `release-graph.json`: `ready`, 22 nodes and 23 edges for
   `release-c3ad223367bc3fa77da9cdd5f79a7c65f4552d94`, preserving its actual
   failed-agent / verified-candidate / skip evidence.
+- `live-receipt.json`: also records dashboard (12 nodes / 11 edges), prepared
+  suggestion (7 / 6), and source scan (5 / 4) graphs. A `ready` source-scan
+  projection retains its unverified evidence label; it does not establish an
+  executed regression or verified repair.
 - `restart.json`: fixture, release and dashboard workers loaded only the main
-  `.env` using the pinned Neo4j environment. The dashboard retained one history
-  entry and seven saved scans. The owner is performing a final refinement and
-  will provide the final restart state separately.
+  `.env` using the pinned Neo4j environment. Final process IDs are 70334 on port
+  8766, 70356 on port 8767, and 71759 on port 8765. The dashboard retained one
+  history entry and seven saved scans.
+
+The deployed DuploCloud proxy returned HTTP 200 / `ready` for the fixture
+resource `6abc29855171566ca109a335` (23 nodes / 22 edges) and the release above
+(22 / 23). This fixture graph belongs to `run-0cbd8aa9e0734ce48dd09e45e546c268`,
+a different saved run from the 45-node direct-worker check. Both proxy routes
+rejected unauthenticated requests with 401 and foreign-workspace requests with
+404. These admin-token checks do not establish ordinary-user membership access
+or browser rendering.
+
+The graph owner's final focused checks passed: 129 Python tests, 34 frontend
+tests, 1,013 C# graph assertions and 157 existing C# assertions. Person 1's
+independent validation covered the bundle and actual-host federation check;
+the owner supplied the graph, restart and focused-test evidence.
 
 No new paid model runs were used for these graph checks. Configuration, route
 behavior and targeted verification commands are documented in
