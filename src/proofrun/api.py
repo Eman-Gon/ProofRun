@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .research import ResearchService
     from .failure_research import FailureResearchService
     from .deployment_graph import DeploymentGraphService
+    from .evidence_graph import RunGraphService
 
 MAX_BODY_BYTES = 65_536
 REQUEST_TIMEOUT_SECONDS = 10
@@ -62,6 +63,7 @@ def create_server(
     service: RunService, token: str, host: str = "127.0.0.1", port: int = 8766,
     *, research: ResearchService | None = None, failure_research: FailureResearchService | None = None,
     graph: DeploymentGraphService | None = None,
+    run_graph: RunGraphService | None = None,
 ) -> ThreadingHTTPServer:
     """Construct a server; the caller owns serve/shutdown and service.close()."""
     if (not isinstance(token, str) or not 1 <= len(token) <= 512
@@ -196,6 +198,12 @@ def create_server(
                 self._json(200, service.get_case(match.group(1)))
             elif self.command == "GET" and (match := _RUN_PATH.fullmatch(self.path)):
                 self._json(200, service.get_run(match.group(1)))
+            elif self.command == "GET" and (match := re.fullmatch(rf"/v1/runs/({_IDENTIFIER})/graph", self.path)):
+                from .evidence_graph import RunGraphService
+                # The client supplies an identity only. All graph data comes
+                # from the worker's authoritative record, never a browser body.
+                run = service.get_run(match[1])
+                self._json(200, (run_graph or RunGraphService()).snapshot("fixture", run))
             elif self.command == "GET" and (match := _ARTIFACT_PATH.fullmatch(self.path)):
                 content, content_type = service.artifact(*match.groups())
                 if not isinstance(content, bytes) or not isinstance(content_type, str) or any(c in content_type for c in "\r\n"):
@@ -242,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         config = WorkerConfig.from_env()
     except ConfigurationError as exc:
         parser.error(str(exc))
-    service = server = research = failure_research = graph = None
+    service = server = research = failure_research = graph = run_graph = None
     try:
         from .research import ResearchService
         research = ResearchService(config.artifact_dir / "customer-research")
@@ -252,8 +260,10 @@ def main(argv: list[str] | None = None) -> int:
                              worker_id=config.worker_id, runner_mode=args.runner, failure_research=failure_research)
         from .deployment_graph import configured_graph
         graph = configured_graph(service, config.artifact_dir / "deployment-graph")
+        from .evidence_graph import configured_run_graph
+        run_graph = configured_run_graph()
         server = create_server(service, config.token, args.host, args.port, research=research,
-                               failure_research=failure_research, graph=graph)
+                               failure_research=failure_research, graph=graph, run_graph=run_graph)
         print(f"ProofRun worker listening on {args.host}:{server.server_port} ({args.runner} runner).", flush=True)
         server.serve_forever()
     except KeyboardInterrupt:
@@ -268,6 +278,8 @@ def main(argv: list[str] | None = None) -> int:
             service.close()
         if graph is not None:
             graph.close()
+        if run_graph is not None:
+            run_graph.close()
         if research is not None:
             research.close()
         if failure_research is not None:

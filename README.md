@@ -158,3 +158,10 @@ investigation button, and the dependent `ingest`/`check` CLI commands have been
 removed. `python3.12 -m src.main upgrade-demo --offline` remains available;
 its saved evidence is local. The current sponsor workflow uses the separate
 ProofRun worker and DuploCloud extension described above.
+
+After a fixture repair passes both pinned environments, the dashboard can create
+a draft GitHub pull request. The action requires an authenticated `gh` CLI and a
+GitHub `origin`. Before publishing, it rechecks the latest report hashes and the
+default-branch file contents against the exact tested source. The browser asks
+for confirmation, then creates a `codex/` branch containing only the verified
+application-file change. Stale or incomplete evidence cannot publish a PR.

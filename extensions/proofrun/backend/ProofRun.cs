@@ -86,6 +86,14 @@ public class ProofRunService : ResourceServiceBase<ProofRunVerification, ProofRu
         return await client.ResearchAsync(entity.OwnerWorkspaceId ?? "", entity.Id, request, ct);
     }
 
+    public async Task<JsonObject> FetchGraphAsync(ProofRunVerification entity, CancellationToken ct)
+    {
+        if (entity.Result?.RunId is not { Length: > 0 } runId)
+            throw new FileNotFoundException("This resource has no worker run yet.");
+        using var client = ProofRunWorkerClient.FromConfiguration(_config);
+        return await client.GraphAsync(entity.OwnerWorkspaceId ?? "", entity.Id, runId, ct);
+    }
+
     public async Task<JsonObject> FetchFailureResearchAsync(ProofRunVerification entity, FailureResearchRequest request,
         CancellationToken ct)
     {

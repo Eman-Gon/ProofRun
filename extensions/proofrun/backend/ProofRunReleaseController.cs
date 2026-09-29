@@ -54,6 +54,20 @@ public partial class ProofRunController
         catch (ProofRunReleaseException ex) { return StatusCode(ex.StatusCode, new { errors = ex.Message }); }
     }
 
+    [HttpGet(ReleaseRoute + "/{id}/graph")]
+    [AccessControl(RouteKey = "workspaceId", AnchorNode = "Workspace", Verb = AccessVerbs.Get)]
+    public async Task<IActionResult> ReleaseGraph([FromRoute] string workspaceId, [FromRoute] string id,
+        [FromServices] IConfiguration config, CancellationToken ct)
+    {
+        try
+        {
+            using var client = ProofRunReleaseClient.FromConfiguration(config);
+            return Ok(new { data = await client.GraphAsync(workspaceId, id, ct) });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { errors = ex.Message }); }
+        catch (ProofRunReleaseException ex) { return StatusCode(ex.StatusCode, new { errors = ex.Message }); }
+    }
+
     [HttpGet(ReleaseRoute + "/{id}/artifacts/{artifactId}")]
     [AccessControl(RouteKey = "workspaceId", AnchorNode = "Workspace", Verb = AccessVerbs.Get)]
     public async Task<IActionResult> ReleaseArtifact([FromRoute] string workspaceId, [FromRoute] string id,

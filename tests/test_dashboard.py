@@ -82,7 +82,8 @@ class DashboardTests(unittest.TestCase):
         gpu, demo = self.manager.state()["cases"]
         expected_fields = {"id", "repository", "title", "kind", "package", "fromVersion", "toVersion", "status", "summary",
                            "sourceUrl", "repoUrl", "commit", "filePath", "lineNumbers", "beforeCode", "afterCode",
-                           "explanation", "scope", "provenance", "checkedAt", "checks", "patch", "canRun", "unavailableReason"}
+                           "explanation", "scope", "provenance", "checkedAt", "checks", "patch", "canRun", "unavailableReason",
+                           "pullRequest"}
         for case in (gpu, demo):
             self.assertEqual(set(case), expected_fields)
             self.assertEqual(case["status"], "confirmed_break")
@@ -340,6 +341,26 @@ class DashboardTests(unittest.TestCase):
             server.dashboard.repository_worker.join(timeout=2)
             self.assertEqual(json.loads(body)["scan"]["repository"], "owner/project")
             self.assertEqual(self.request(server, "GET", "/api/state")[0], 200)
+
+    def test_draft_pr_endpoint_requires_csrf_exact_case_and_verified_publisher(self):
+        self.write_reports()
+        server = self.start_server()
+        host = f"127.0.0.1:{server.server_port}"
+        valid = {"Content-Type": "application/json", "Origin": "http://" + host,
+                 "X-CSRF-Token": server.dashboard.token}
+        result = {"url": "https://github.com/owner/repo/pull/7", "number": 7,
+                  "repository": "owner/repo", "branch": "codex/proofrun-fix", "draft": True}
+        with patch("src.dashboard.create_draft", return_value=result) as publish:
+            self.assertEqual(self.request(server, "POST", "/api/pull-requests", {"caseId": "pydantic"},
+                                          valid | {"X-CSRF-Token": "wrong"})[0], 403)
+            for payload in ({}, {"caseId": []}, {"caseId": "pydantic", "extra": True}):
+                self.assertEqual(self.request(server, "POST", "/api/pull-requests", payload, valid)[0], 400)
+            self.assertEqual(self.request(server, "POST", "/api/pull-requests", {"caseId": "gpu-energy-pandas"}, valid)[0], 400)
+            status, body, _ = self.request(server, "POST", "/api/pull-requests", {"caseId": "pydantic"}, valid)
+            self.assertEqual(status, 201)
+            self.assertEqual(json.loads(body)["pullRequest"], result)
+            publish.assert_called_once()
+            self.assertEqual(server.dashboard.state()["cases"][1]["pullRequest"]["result"], result)
 
     def test_repository_picker_default_owner_comes_from_project_config(self):
         (self.root / ".env").write_text("TARGET_REPO=Configured-Owner/project\nGITHUB_TOKEN=secret\n")

@@ -8,6 +8,7 @@ import { buildMeetingBrief, buildReleaseAssessment } from './release-summary';
 import { CustomerResearch, CustomerResearchRequest, metricLabel, previousCompleteMonth, researchRequest, researchStatusText, safeResearchSource } from './customer-research';
 import { FailureResearchComponent } from './failure-research.component';
 import { FailureResearch, fixtureFailureQuery } from './failure-research';
+import { EvidenceGraphComponent } from './evidence-graph.component';
 
 interface ResearchSession {
   pending: boolean;
@@ -19,7 +20,7 @@ interface ResearchSession {
 @Component({
   selector: 'proofrun-verification',
   standalone: true,
-  imports: [CommonModule, FailureResearchComponent],
+  imports: [CommonModule, FailureResearchComponent, EvidenceGraphComponent],
   styleUrl: './proofrun.component.scss',
   template: `
     <main class="proofrun-page">
@@ -89,6 +90,8 @@ interface ResearchSession {
             }
           </div>
           @if (selected(); as resource) {
+            <proofrun-evidence-graph kind="fixture" [resourceId]="resource.id"
+              [runId]="summary()?.run_id || resource.result?.runId || ''" [revision]="graphRevision()"></proofrun-evidence-graph>
             <section class="customer-research" aria-labelledby="research-title">
               <div class="section-title"><h2 id="research-title">Customer context</h2><span class="scope-badge">Similarweb</span></div>
               <p class="muted">Look up estimated website visits for the client meeting. This context does not change the release or repair verdict.</p>
@@ -250,6 +253,12 @@ export class ProofRunComponent implements OnInit {
     const run = this.summary();
     return run ? ['queued', 'running'].includes(run.execution_status)
       : ['New', 'Updated', 'Processing'].includes(this.selected()?.status ?? '');
+  });
+  protected readonly graphRevision = computed(() => {
+    const run = this.summary();
+    // Poll observation timestamps change even when the worker snapshot does not.
+    return JSON.stringify(run ? [run.execution_status, run.finding_status, run.repair_status,
+      run.bindings, run.cases, run.artifacts, run.environments, run.proposal, run.attempts, run.verification] : this.selected()?.status);
   });
   protected readonly assessment = computed(() => buildReleaseAssessment(
     this.summary(), this.selected()?.result?.bridgeError || this.observationError(),

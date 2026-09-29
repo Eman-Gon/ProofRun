@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, defer, map, shareReplay, timeout } from 'rxjs';
+import { EvidenceGraph, EvidenceGraphCache, readEvidenceGraph } from './evidence-graph';
 import type { CustomerResearch, CustomerResearchRequest } from './customer-research';
 import type { FailureResearch } from './failure-research';
 
@@ -19,6 +20,8 @@ export interface RunSummary {
   cases?: { id?: string; stage?: string; status?: string; [key: string]: unknown }[];
   environments?: Record<string, { observed_version?: string; [key: string]: unknown }>;
   artifacts?: { id: string; sha256: string; size_bytes: number }[];
+  attempts?: { attempt: number; repair_status?: string; candidate_sha256?: string }[];
+  verification?: Record<string, unknown>;
   limitations?: string[];
 }
 
@@ -40,6 +43,7 @@ export interface ProofRunResource {
 export class ProofRunService {
   private readonly http = inject<any>('REMOTE_DuploHttpClient' as any);
   private readonly session = inject<any>('REMOTE_UserSession' as any);
+  private readonly graphs = new EvidenceGraphCache<Observable<EvidenceGraph>>();
   private base(): string {
     const workspace = this.session?.tenant?.TenantId;
     if (!workspace) throw new Error('Select a DuploCloud workspace before running verification.');
@@ -73,6 +77,16 @@ export class ProofRunService {
 
   researchScope(resourceId: string): string {
     return `${this.base()}/${encodeURIComponent(resourceId)}`;
+  }
+
+  graphScope(resourceId: string): string { return `${this.researchScope(resourceId)}/graph`; }
+
+  graph(resourceId: string, runId: string, revision: string, refresh = false): Observable<EvidenceGraph> {
+    const scope = this.graphScope(resourceId);
+    return this.graphs.get(scope, runId, revision, () => defer(() => this.http.get(scope)).pipe(
+      timeout(20000), map(response => readEvidenceGraph(this.unwrap(response), 'fixture', runId)),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    ), refresh);
   }
 
   research(resourceId: string, request: CustomerResearchRequest): Observable<CustomerResearch> {

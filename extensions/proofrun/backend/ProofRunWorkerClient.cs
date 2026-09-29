@@ -151,6 +151,23 @@ public sealed class ProofRunWorkerClient : IDisposable
     private static bool BoundedText(JsonObject value, string key, int max)
         => Text(value, key) is { Length: > 0 } text && text.Length <= max;
 
+    public async Task<JsonObject> GraphAsync(string workspaceId, string resourceId, string runId, CancellationToken ct)
+    {
+        EvidenceGraphReport.RequireScope(workspaceId);
+        // Persisted result IDs may be edited through the resource API. Re-establish the authoritative binding.
+        JsonObject run;
+        try { run = await GetRunAsync(runId, ct); }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        { throw new ProofRunBridgeException(EvidenceGraphReport.Invalid); }
+        RequireJobKey(run, JobKey(workspaceId, resourceId));
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"v1/runs/{Uri.EscapeDataString(runId)}/graph");
+        request.Headers.Add("X-ProofRun-Scope", workspaceId);
+        var bytes = await SendAsync(request, 1024 * 1024, ct);
+        try { return EvidenceGraphReport.Validate(EvidenceGraphReport.Parse(bytes), "fixture", runId); }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        { throw new ProofRunBridgeException(EvidenceGraphReport.Invalid); }
+    }
+
     public async Task<JsonObject> FailureResearchAsync(string workspaceId, string resourceId, string runId,
         FailureResearchRequest input, CancellationToken ct)
     {

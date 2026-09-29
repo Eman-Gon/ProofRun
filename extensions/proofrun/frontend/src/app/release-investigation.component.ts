@@ -6,6 +6,7 @@ import { EMPTY, Subscription, catchError, exhaustMap, takeWhile, timeout, timer 
 import { extractErrorMessage } from '@duplocloud-internal/ng-common-lib';
 import { FailureResearchComponent } from './failure-research.component';
 import { FailureResearch } from './failure-research';
+import { EvidenceGraphComponent } from './evidence-graph.component';
 import {
   ReleaseInvestigation, ReleaseInvestigationRequest, ReleaseInvestigationService, ReleaseTarget,
 } from './release-investigation.service';
@@ -13,7 +14,7 @@ import {
 @Component({
   selector: 'proofrun-release-investigation',
   standalone: true,
-  imports: [CommonModule, FormsModule, FailureResearchComponent],
+  imports: [CommonModule, FormsModule, FailureResearchComponent, EvidenceGraphComponent],
   styleUrl: './release-investigation.component.scss',
   template: `
     <main class="release-page">
@@ -116,6 +117,10 @@ import {
               <div><dt>Intended benefit</dt><dd>{{ current.request.benefit }}</dd></div>
               <div><dt>Budget</dt><dd>{{ current.request.budget_seconds / 60 }} minutes</dd></div>
             </dl>
+            @if (!current.result?.findings?.length) {
+              <proofrun-evidence-graph kind="release" [runId]="current.id"
+                [revision]="current.updated_at || current.status"></proofrun-evidence-graph>
+            }
             @if (current.result; as result) {
               <h3>Coverage and execution</h3>
               <dl class="execution-grid">
@@ -142,6 +147,8 @@ import {
                     <p><strong>Repair:</strong> {{ label(finding.repair.status) }}</p>
                     <p class="field-help">A repair result does not change what was observed in the original candidate commit.</p>
                   }
+                  <proofrun-evidence-graph kind="release" [runId]="current.id" [findingId]="finding.id"
+                    [revision]="current.updated_at || current.status"></proofrun-evidence-graph>
                   <details><summary>Finding evidence</summary><pre>{{ finding.evidence | json }}</pre></details>
                   @if (finding.repair) { <details><summary>Repair evidence</summary><pre>{{ finding.repair | json }}</pre></details> }
                   @if (finding.status === 'confirmed' && finding.id) {

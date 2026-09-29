@@ -34,7 +34,8 @@ RUN_TIMEOUT = 180
 INTERRUPT_GRACE = 20
 KILL_GRACE = 5
 STATIC = {"/": ("index.html", "text/html"), "/index.html": ("index.html", "text/html"),
-          "/styles.css": ("styles.css", "text/css"), "/app.js": ("app.js", "text/javascript")}
+          "/styles.css": ("styles.css", "text/css"), "/app.js": ("app.js", "text/javascript"),
+          "/graph.js": ("graph.js", "text/javascript")}
 
 
 def _now():
@@ -101,7 +102,7 @@ def _cell(item, *, gpu=False):
 
 
 class Dashboard:
-    def __init__(self, root=ROOT):
+    def __init__(self, root=ROOT, *, graph_service=None):
         self.root = Path(root)
         self.token = secrets.token_urlsafe(32)
         self.lock = threading.Lock()
@@ -112,6 +113,74 @@ class Dashboard:
         self.repository_worker = None
         self.pull_requests = {}
         self.repository_owner = _repository_owner(self.root)
+        self.graph_service = graph_service
+        self.graph_lock = threading.RLock()
+
+    def evidence_graph(self, case_id=None, *, scan_id=None, finding_index=None):
+        current = self.state()
+        if scan_id is not None:
+            scans = current["repositoryScans"] + [entry["scan"] for entry in current["demoReady"] if entry.get("scan")]
+            scan = next((item for item in scans if item["id"] == scan_id and item["status"] == "completed"), None)
+            findings = (scan or {}).get("result", {}).get("findings", [])
+            if type(finding_index) is not int or not 0 <= finding_index < len(findings):
+                raise ValueError("A saved finding is required.")
+        elif case_id not in CASE_IDS:
+            raise ValueError("A known case is required.")
+        from .proofrun.evidence_graph import RunGraphService, EvidenceGraphStore
+        from .proofrun.neo4j_store import GraphConfig, GraphConfigurationError, GraphUnavailable
+        with self.graph_lock:
+            if self.graph_service is None:
+                settings = dict(os.environ)
+                path = self.root / ".env"
+                try:
+                    if path.stat().st_size <= 64_000:
+                        settings = {**dotenv_values(path, interpolate=False), **settings}
+                except (OSError, UnicodeError):
+                    pass
+                store = None
+                try:
+                    config = GraphConfig.from_env(settings)
+                    if config.enabled:
+                        store = EvidenceGraphStore(config)
+                except (GraphConfigurationError, GraphUnavailable):
+                    pass
+                self.graph_service = RunGraphService(store)
+            if scan_id is not None:
+                result, finding = scan["result"], findings[finding_index]
+                identity = f"scan-{scan_id}-{finding_index}"
+                report_hash = hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest()
+                patch_hash = hashlib.sha256(json.dumps([finding.get("beforeCode"), finding.get("afterCode")]).encode()).hexdigest()
+                record = {"id": f"dashboard-{identity}-{report_hash[:24]}", "case_id": identity,
+                          "fix_id": identity, "status": "completed", "report_sha256": report_hash,
+                          "case": {"id": identity, "kind": "source_scan", "status": "unverified",
+                                   "repository": result.get("repository"), "commit": result.get("commit"),
+                                   "package": finding.get("package"), "filePath": finding.get("file"),
+                                   "checks": [], "patch_sha256": patch_hash}}
+                return self.graph_service.snapshot("dashboard", record)
+            case = next(item for item in current["cases"] if item["id"] == case_id)
+            path = self.report_path(case_id)
+            report_hash = None
+            try:
+                if path is not None and path.stat().st_size <= 2_000_000 and _read(path) is not None:
+                    report_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError:
+                pass
+            # Only bounded measured fields are projected. Source snippets,
+            # stdout, credentials and local paths never go to the graph store.
+            fields = ("id", "repository", "title", "kind", "package", "fromVersion", "toVersion",
+                      "status", "commit", "filePath", "checkedAt", "provenance", "scope")
+            safe_case = {key: case.get(key) for key in fields}
+            safe_case["checks"] = [{"id": row["id"], "label": row["label"], **{
+                side: {"status": row[side]["status"]} if row.get(side) else None
+                for side in ("before", "after")}} for row in case.get("checks", [])]
+            safe_case["patch_sha256"] = hashlib.sha256(case["patch"].encode()).hexdigest() if case.get("patch") else None
+            fingerprint = hashlib.sha256(json.dumps(safe_case, sort_keys=True).encode()).hexdigest()
+            record = {"id": f"dashboard-{case_id}-{fingerprint[:24]}", "case_id": case_id,
+                      "status": "completed" if report_hash else "not_run", "report_sha256": report_hash,
+                      "case": safe_case, "fix_id": case_id}
+            if case["status"] == "not_run":
+                record["status"] = "not_run"
+            return self.graph_service.snapshot("dashboard", record)
 
     def report_path(self, case_id):
         if case_id == "gpu-energy-pandas":
@@ -364,6 +433,9 @@ class Dashboard:
             self.worker.join(timeout=INTERRUPT_GRACE + KILL_GRACE + 1)
         if self.repository_worker:
             self.repository_worker.join(timeout=20)
+        with self.graph_lock:
+            if self.graph_service is not None:
+                self.graph_service.close()
 
 
 def make_server(root=ROOT, port=8765):
@@ -405,6 +477,24 @@ def make_server(root=ROOT, port=8765):
             url = urlsplit(self.path)
             if url.path == "/api/state":
                 self._send(200, dashboard.state())
+            elif url.path == "/api/graph":
+                query = parse_qs(url.query, keep_blank_values=True)
+                case_query = set(query) == {"caseId"} and len(query["caseId"]) == 1 and query["caseId"][0] in CASE_IDS
+                scan_query = (set(query) == {"scanId", "findingIndex"} and len(query["scanId"]) == 1
+                              and len(query["findingIndex"]) == 1 and re.fullmatch(r"[A-Za-z0-9_-]{1,100}", query["scanId"][0])
+                              and re.fullmatch(r"[0-9]{1,3}", query["findingIndex"][0]))
+                if not (case_query or scan_query):
+                    return self._send(400, {"error": "A known caseId or saved scan finding is required."})
+                if self.headers.get("Sec-Fetch-Site") == "cross-site":
+                    return self._send(403, {"error": "Same-origin requests required."})
+                try:
+                    graph = (dashboard.evidence_graph(query["caseId"][0]) if case_query else
+                             dashboard.evidence_graph(scan_id=query["scanId"][0], finding_index=int(query["findingIndex"][0])))
+                    self._send(200, graph)
+                except ValueError:
+                    self._send(404, {"error": "The saved finding was not found."})
+                except Exception:
+                    self._send(503, {"error": "The evidence graph could not be loaded. Verification results are unchanged."})
             elif url.path == "/api/repositories":
                 query = parse_qs(url.query, keep_blank_values=True)
                 if set(query) - {"owner"} or ("owner" in query and len(query["owner"]) != 1):

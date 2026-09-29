@@ -128,6 +128,17 @@ public sealed class ProofRunReleaseClient : IDisposable
         return bytes;
     }
 
+    public async Task<JsonObject> GraphAsync(string workspaceId, string runId, CancellationToken ct)
+    {
+        // The scoped run read establishes ownership before any graph is fetched.
+        _ = await GetRunAsync(workspaceId, runId, ct);
+        using var request = Request(workspaceId, HttpMethod.Get, $"v1/release-runs/{runId}/graph");
+        var bytes = await SendAsync(request, 1024 * 1024, ct);
+        try { return EvidenceGraphReport.Validate(EvidenceGraphReport.Parse(bytes), "release", runId); }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException)
+        { throw new ProofRunReleaseException(EvidenceGraphReport.Invalid); }
+    }
+
     public async Task<JsonObject> FailureResearchAsync(string workspaceId, string runId, JsonObject input, CancellationToken ct)
     {
         RequireScope(workspaceId); RequireRunId(runId);

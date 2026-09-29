@@ -112,7 +112,7 @@ def create_draft(root: Path, case: dict, report_path: Path | None) -> dict:
     remote_sha = remote.get("sha")
     encoded = remote.get("content")
     try:
-        remote_bytes = base64.b64decode(encoded, validate=True) if isinstance(encoded, str) else b""
+        remote_bytes = base64.b64decode("".join(encoded.split()), validate=True) if isinstance(encoded, str) else b""
     except ValueError:
         remote_bytes = b""
     original = (root / path).read_bytes()

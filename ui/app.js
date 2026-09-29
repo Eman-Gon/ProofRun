@@ -272,7 +272,7 @@ function renderRepository() {
     $('repository-explanation-' + id).textContent = hasExplanation && typeof explanation[field] === 'string' ? explanation[field] : '';
   }
   $('repository-findings').replaceChildren();
-  for (const finding of findings) {
+  for (const [findingIndex, finding] of findings.entries()) {
     const article = node('article', 'repository-finding');
     article.append(node('span', 'result-badge', 'Potential upgrade issue'), node('h3', '', finding.title || finding.package),
       node('p', '', finding.explanation || 'Review this usage before changing dependency versions.'));
@@ -303,6 +303,10 @@ function renderRepository() {
     setLink(source, finding.sourceUrl);
     article.append(source);
     $('repository-findings').append(article);
+    const graph = node('section', 'evidence-graph');
+    graph.setAttribute('aria-label', 'Suggested fix evidence graph');
+    article.append(graph);
+    ProofRunGraph.mount(graph, `/api/graph?scanId=${encodeURIComponent(scan.id)}&findingIndex=${findingIndex}`, signature + findingIndex);
   }
   $('repository-dependencies').hidden = running || failed;
   $('repository-dependencies-label').textContent = `Dependencies (${dependencies.length})`;
@@ -508,6 +512,7 @@ function renderCase() {
   setLink($('source-link'), item.sourceUrl);
   setLink($('repo-link'), item.repoUrl);
   renderEvidence(item);
+  ProofRunGraph.mount($('fix-graph'), `/api/graph?caseId=${encodeURIComponent(item.id)}`, signature);
 }
 
 function renderEvidence(item) {

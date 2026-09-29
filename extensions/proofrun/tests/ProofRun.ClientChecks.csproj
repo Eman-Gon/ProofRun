@@ -9,5 +9,6 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Compile Include="../backend/ProofRunWorkerClient.cs" Link="ProofRunWorkerClient.cs" />
     <Compile Include="../backend/FailureResearchReport.cs" Link="FailureResearchReport.cs" />
+    <Compile Include="../backend/EvidenceGraphReport.cs" Link="EvidenceGraphReport.cs" />
   </ItemGroup>
 </Project>

@@ -16,7 +16,7 @@ from .release_service import Conflict, ReleaseService
 from .research import ResearchError
 
 
-def create_server(service, token, host="127.0.0.1", port=8767, *, failure_research=None):
+def create_server(service, token, host="127.0.0.1", port=8767, *, failure_research=None, run_graph=None):
     if not isinstance(token, str) or len(token) < 32 or any(ord(c) < 33 or ord(c) > 126 for c in token):
         raise ValueError("Use a server-side worker token of at least 32 printable characters.")
     class Handler(BaseHTTPRequestHandler):
@@ -62,6 +62,10 @@ def create_server(service, token, host="127.0.0.1", port=8767, *, failure_resear
                     return self.send_json(200, service.list_targets(scope))
                 if match := re.fullmatch(r"/v1/release-runs/(release-[a-f0-9]{40})", path):
                     return self.send_json(200, service.get(match[1], scope))
+                if match := re.fullmatch(r"/v1/release-runs/(release-[a-f0-9]{40})/graph", path):
+                    from .evidence_graph import RunGraphService
+                    run = service.get(match[1], scope)
+                    return self.send_json(200, (run_graph or RunGraphService()).snapshot("release", run, scope=scope))
                 if match := re.fullmatch(r"/v1/release-runs/(release-[a-f0-9]{40})/artifacts/([a-z0-9.-]+)", path):
                     return self.send_bytes(200, service.artifact(match[1], match[2], scope), "application/octet-stream")
                 self.send_json(404, {"error": "Unknown release endpoint."})
@@ -139,9 +143,11 @@ def main():
     from .failure_research import FailureResearchService
     failure_research = FailureResearchService(args.artifacts / "failure-research")
     service = ReleaseService(targets, args.artifacts, failure_research=failure_research)
+    from .evidence_graph import configured_run_graph
+    run_graph = configured_run_graph()
     try:
         server = create_server(service, os.environ.get("PROOFRUN_WORKER_TOKEN", ""), args.host, args.port,
-                               failure_research=failure_research)
+                               failure_research=failure_research, run_graph=run_graph)
         print(f"Release investigation worker listening on {args.host}:{server.server_port}", flush=True)
         try:
             server.serve_forever()
@@ -151,6 +157,7 @@ def main():
             server.server_close()
     finally:
         service.close()
+        run_graph.close()
         failure_research.close()
     return 0
 

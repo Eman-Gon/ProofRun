@@ -37,6 +37,18 @@ public partial class ProofRunController : ResourcesController<ProofRunVerificati
         catch (ProofRunBridgeException ex) { return StatusCode(502, new { errors = ex.Message }); }
     }
 
+    // Inherited resource GET authorization and the persisted owner bind this graph to the requested workspace.
+    [HttpGet("{id}/graph")]
+    public async Task<IActionResult> Graph(string workspaceId, string id, CancellationToken ct)
+    {
+        var entity = await ResourceServiceFacet.GetByIdAsync(id, ct);
+        if (entity is null || !string.Equals(entity.OwnerWorkspaceId, workspaceId, StringComparison.Ordinal)) return NotFound();
+        try { return Ok(new { data = await _service.FetchGraphAsync(entity, ct) }); }
+        catch (FileNotFoundException) { return NotFound(); }
+        catch (ArgumentException ex) { return BadRequest(new { errors = ex.Message }); }
+        catch (ProofRunBridgeException ex) { return StatusCode(502, new { errors = ex.Message }); }
+    }
+
     // The inherited resource filter authorizes this existing resource. A research request never updates a verdict.
     [HttpPost("{id}/failure-research")]
     [RequestSizeLimit(16000)]

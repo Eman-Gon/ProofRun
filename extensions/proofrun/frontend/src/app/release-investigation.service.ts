@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, defer, map } from 'rxjs';
+import { Observable, defer, map, shareReplay, timeout } from 'rxjs';
+import { EvidenceGraph, EvidenceGraphCache, readEvidenceGraph } from './evidence-graph';
 import type { FailureResearch } from './failure-research';
 
 export interface ReleaseTarget {
@@ -57,6 +58,7 @@ export interface ReleaseInvestigation {
 export class ReleaseInvestigationService {
   private readonly http = inject<any>('REMOTE_DuploHttpClient' as any);
   private readonly session = inject<any>('REMOTE_UserSession' as any);
+  private readonly graphs = new EvidenceGraphCache<Observable<EvidenceGraph>>();
 
   private base(): string {
     const workspace = this.session?.tenant?.TenantId;
@@ -88,6 +90,16 @@ export class ReleaseInvestigationService {
 
   get(id: string): Observable<ReleaseInvestigation> {
     return defer(() => this.http.get(`${this.base()}/${encodeURIComponent(id)}`)).pipe(map(response => this.readRun(response)));
+  }
+
+  graphScope(runId: string): string { return `${this.base()}/${encodeURIComponent(runId)}/graph`; }
+
+  graph(runId: string, revision: string, refresh = false): Observable<EvidenceGraph> {
+    const scope = this.graphScope(runId);
+    return this.graphs.get(scope, runId, revision, () => defer(() => this.http.get(scope)).pipe(
+      timeout(20000), map(response => readEvidenceGraph(this.unwrap(response), 'release', runId)),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    ), refresh);
   }
 
   failureResearch(runId: string, findingId: string, requestId: string, query: string): Observable<FailureResearch> {

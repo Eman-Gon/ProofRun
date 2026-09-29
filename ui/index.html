@@ -7,6 +7,7 @@
   <title>Hackday Idea — dependency checks</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23222c22'/%3E%3Cpath d='M10 15h15l-5-5m10 15H15l5 5' fill='none' stroke='%23c8f58d' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
+  <script src="/graph.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -102,6 +103,7 @@
             <p id="fix-description"></p>
             <div class="diff-card"><div class="diff-header"><span id="fix-path"></span><span id="fix-lines"></span></div><div class="diff-code"><div class="diff-line removed"><span aria-label="Remove">−</span><code id="before-code"></code></div><div class="diff-line added"><span aria-label="Add">+</span><code id="after-code"></code></div></div></div>
             <p id="fix-verification" class="fix-note"></p>
+            <section id="fix-graph" class="evidence-graph" aria-label="Fix evidence graph"></section>
             <p id="pr-status" class="fix-note" hidden><a id="pr-link" target="_blank" rel="noopener noreferrer"></a></p>
           </section>
           <div class="supporting-details">
