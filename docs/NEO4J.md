@@ -244,3 +244,19 @@ The measured receipt is at
 `.commit-watch/neo4j/live-acceptance-1/receipt.json`; the underlying run,
 artifacts and database relationship evidence are beside it. See the
 [integration validation record](../INTEGRATION.md#neo4j-validation--september-29-2026).
+
+### Configured free Aura instance
+
+On September 29, the user approved free-only cloud setup. **ProofRun**
+(`abaa7830`) now runs on **AuraDB Free**, confirmed at **$0/hour**. Its database
+credentials are in ignored `.env.neo4j` with owner-only file permissions. No
+management API key is required by this driver integration.
+
+Encrypted connectivity and the complete selection/native-Docker acceptance
+passed against Aura: two of three deployments selected, 14 checks executed,
+four artifacts verified, and old-contract reuse rejected. Evidence is at
+`.commit-watch/neo4j/aura-free-acceptance-1/`; the
+[Aura validation record](../INTEGRATION.md#auradb-free-activation--september-29-2026)
+documents the actual run and its limits. Use the existing `.env.neo4j`; do not
+replace it with local Compose settings or expose its contents. Free instances
+are subject to deletion after 30 days of inactivity according to the console.

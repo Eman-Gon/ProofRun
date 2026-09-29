@@ -52,6 +52,14 @@ def process_response(value=None, raw=None):
     return SimpleNamespace(returncode=0, stdout=json.dumps({"response": base64.b64encode(raw).decode()}).encode())
 
 
+def invalid_arguments_response(arguments='{"summary": private-unquoted-data}'):
+    envelope = completion()
+    wire = json.loads(envelope["choices"][0]["message"]["content"])
+    wire["arguments"] = arguments
+    envelope["choices"][0]["message"]["content"] = json.dumps(wire)
+    return process_response(envelope)
+
+
 class ReleaseAgentTests(unittest.TestCase):
     def run_agent(self, model, tool=None, data=None, seconds=10, events=None):
         return agent.investigate(context() if data is None else data, tool or Mock(return_value={}),
@@ -349,11 +357,145 @@ class ReleaseAgentTests(unittest.TestCase):
 
 
 class ReleaseProviderTests(unittest.TestCase):
-    def live(self, process, events=None, seconds=5):
+    def live(self, process, events=None, seconds=5, data=None, tool=None):
         with patch.dict(os.environ, {"OPENROUTER_API_KEY": KEY, "PROOFRUN_MODEL": MODEL}, clear=True):
             with patch.object(agent.subprocess, "run", process):
-                return agent.investigate(context(), Mock(), time.monotonic() + seconds,
+                return agent.investigate(context() if data is None else data,
+                                         Mock(return_value={}) if tool is None else tool, time.monotonic() + seconds,
                                          None if events is None else events.append)
+
+    def test_syntax_correction_keeps_failed_provenance_and_previous_observations(self):
+        process = Mock(side_effect=[process_response(completion(action("diff", {}), id="gen-first")),
+                                    invalid_arguments_response(),
+                                    process_response(completion(id="gen-corrected"))])
+        events, tool = [], Mock(return_value={"content": "Retained source evidence"})
+        result = self.live(process, events=events, tool=tool)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["steps"], 3)
+        tool.assert_called_once_with("diff", {})
+        failed, corrected = result["provenance"][1:]
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["error_code"], "decision_arguments_json_invalid")
+        self.assertTrue(failed["format_correction_requested"])
+        self.assertEqual(corrected["corrects_step"], 2)
+        self.assertNotEqual(failed["operation_id"], corrected["operation_id"])
+        messages = json.loads(process.call_args.kwargs["input"])["body"]["messages"]
+        self.assertIn("Retained source evidence", json.dumps(messages))
+        feedback = json.loads(messages[-1]["content"])
+        self.assertEqual(feedback["format_correction"]["rejected_step"], 2)
+        self.assertEqual(feedback["remaining_budget"]["decisions"], 28)
+        self.assertNotIn("private-unquoted-data", json.dumps([messages, result, events]))
+        self.assertEqual([e["step"] for e in events if e["type"] == "decision"], [1, 3])
+
+    def test_correction_can_choose_a_tool_without_replaying_previous_tools(self):
+        probe = action("run_probe", {"name": "Explore", "requirement_id": "preserve-input",
+            "steps": [{"method": "POST", "path": "/records", "json": {"id": "001"}}],
+            "hypothesis": "Explore a boundary."})
+        process = Mock(side_effect=[invalid_arguments_response(), process_response(completion(probe)), process_response()])
+        tool = Mock(return_value={"status": "preserved"})
+        result = self.live(process, tool=tool)
+        self.assertEqual(result["status"], "completed")
+        tool.assert_called_once_with("run_probe", probe["arguments"])
+        messages = json.loads(process.call_args.kwargs["input"])["body"]["messages"]
+        self.assertFalse(any("format_correction" in message["content"] for message in messages))
+        self.assertEqual(json.loads(messages[-1]["content"])["remaining_budget"]["run_probe"], agent.MAX_PROBES - 1)
+
+    def test_syntax_correction_is_capped_across_the_entire_investigation(self):
+        for responses, expected_calls in (
+            ([invalid_arguments_response()] * 3, 2),
+            ([invalid_arguments_response(), process_response(completion(action("diff", {}))),
+              invalid_arguments_response(), process_response()], 3),
+        ):
+            with self.subTest(expected_calls=expected_calls):
+                process = Mock(side_effect=responses)
+                tool = Mock(return_value={})
+                result = self.live(process, tool=tool)
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(process.call_count, expected_calls)
+                self.assertEqual(tool.call_count, expected_calls - 2)
+                self.assertEqual(sum(bool(p.get("format_correction_requested")) for p in result["provenance"]), 1)
+
+    def test_syntax_correction_cannot_extend_decision_limit(self):
+        process, tool = Mock(return_value=invalid_arguments_response()), Mock()
+        result = self.live(process, data=context(tool_limit=1), tool=tool)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["steps"], 1)
+        self.assertEqual(process.call_count, 1)
+        self.assertNotIn("format_correction_requested", result["provenance"][0])
+        tool.assert_not_called()
+
+    def test_expired_deadline_prevents_syntax_correction(self):
+        clock = [100.0]
+        def response(*args, **kwargs):
+            clock[0] += 6
+            return invalid_arguments_response()
+        process, tool = Mock(side_effect=response), Mock()
+        with patch.object(agent.time, "monotonic", side_effect=lambda: clock[0]):
+            result = self.live(process, seconds=5, tool=tool)
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(process.call_count, 1)
+        tool.assert_not_called()
+
+    def test_correction_provider_timeout_uses_only_remaining_budget(self):
+        clock, timeouts = [100.0], []
+        def response(*args, **kwargs):
+            timeouts.append(kwargs["timeout"])
+            if len(timeouts) == 1:
+                clock[0] += 4
+                return invalid_arguments_response()
+            raise subprocess.TimeoutExpired("provider", kwargs["timeout"])
+        process = Mock(side_effect=response)
+        with patch.object(agent.time, "monotonic", side_effect=lambda: clock[0]):
+            result = self.live(process, seconds=5)
+        self.assertEqual(timeouts, [5, 1])
+        self.assertEqual(result["status"], "timed_out")
+        self.assertEqual(process.call_count, 2)
+
+    def test_non_syntax_json_rejections_do_not_get_a_correction(self):
+        for arguments in ('{"summary":"a","summary":"b"}', '{"summary":NaN}', '[]'):
+            with self.subTest(arguments=arguments):
+                process, tool = Mock(return_value=invalid_arguments_response(arguments)), Mock()
+                result = self.live(process, tool=tool)
+                self.assertEqual(result["status"], "failed")
+                self.assertEqual(process.call_count, 1)
+                tool.assert_not_called()
+
+    def test_corrected_action_still_obeys_policy_validation(self):
+        invalid = action("run_probe", {"name": "Explore", "requirement_id": "preserve-input",
+            "steps": [{"method": "POST", "path": "/records"}], "hypothesis": "Explore.", "expected": "pass"})
+        process = Mock(side_effect=[invalid_arguments_response(), process_response(completion(invalid)), process_response()])
+        tool = Mock()
+        result = self.live(process, tool=tool)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["provenance"][1]["validation_error_code"], "unsupported_arguments")
+        self.assertEqual(process.call_count, 2)
+        tool.assert_not_called()
+
+    def test_syntax_feedback_and_history_eviction_share_the_prompt_budget(self):
+        calls, requests = 0, []
+        def response(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            messages = json.loads(kwargs["input"])["body"]["messages"]
+            requests.append(messages)
+            # Provider wire instructions are added after the ordinary prompt
+            # accounting, independently of the correction feedback.
+            messages[0]["content"] = messages[0]["content"].removesuffix("\n" + agent._WIRE_FORMAT)
+            self.assertLessEqual(len(agent._json(messages).encode()), agent.MAX_PROMPT_BYTES)
+            if calls == 11:
+                return invalid_arguments_response()
+            if calls == 12:
+                return process_response()
+            return process_response(completion(action("diff", {})))
+        result = self.live(Mock(side_effect=response), tool=Mock(return_value={"content": "x" * 12_000}))
+        self.assertEqual(result["status"], "completed")
+        last = requests[-1]
+        self.assertTrue(any("pairs omitted" in message["content"] for message in last))
+        first_action = next(index for index, message in enumerate(last) if message["role"] == "assistant")
+        history = last[first_action:-1]
+        self.assertEqual(len(history) % 2, 0)
+        self.assertEqual([m["role"] for m in history], ["assistant", "user"] * (len(history) // 2))
+        self.assertIn("format_correction", last[-1]["content"])
 
     def test_missing_model_has_no_prepared_fallback(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(agent.subprocess, "run") as process:

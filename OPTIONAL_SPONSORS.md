@@ -1,6 +1,6 @@
 # ProofRun: selected additions and deferred sponsors
 
-Status: **NEO4J IMPLEMENTED AND VERIFIED WITH LOCAL DOCKER; SIMILARWEB + BAND IMPLEMENTED LOCALLY.** See each integration's validation record for measured access and remaining gates.
+Status: **NEO4J VERIFIED ON AURADB FREE WITH LOCAL DOCKER; SIMILARWEB + BAND IMPLEMENTED LOCALLY.** See each integration's validation record for measured access and remaining gates.
 
 On September 29, 2026, the user explicitly selected **Similarweb + BAND**, then requested **Neo4j** implementation. These requests supersede the earlier core-first deferral and one-at-a-time restriction for the selected additions. Plaud and Vultr remain deferred. Follow `CLAUDE.md` and `INTEGRATION.md` for the core build; its incomplete gates remain incomplete. Documentation, unit tests and saved reports do not establish a live sponsor integration.
 
@@ -122,7 +122,7 @@ Use the core ownership map in `INTEGRATION.md`. Preserve its `/v1/runs` API and 
 
 | Sponsor | Initial status | Reason / activation evidence |
 |---|---|---|
-| Neo4j | LOCAL LIVE CHECK PASSED | Real Neo4j selected exactly two of three synthetic deployments; selected native Docker run executed 14 checks, retained four hash-checked artifacts and rejected old-contract reuse. See [integration evidence](INTEGRATION.md#neo4j-validation--september-29-2026). |
+| Neo4j | AURA FREE LIVE CHECK PASSED | User-approved $0/hour AuraDB Free instance selected exactly two of three synthetic deployments; selected native Docker run executed 14 checks, retained four hash-checked artifacts and rejected old-contract reuse. See [Aura evidence](INTEGRATION.md#auradb-free-activation--september-29-2026). |
 | Plaud | DEFERRED | Core incomplete; usable recording and intake need unverified |
 | Vultr | DEFERRED | Core incomplete; portability/recovery need unverified |
 | BAND | LOCAL CHECKS PASS | Consequential room handoff implemented; live credentials and room evidence pending |

@@ -865,3 +865,86 @@ Aura, production infrastructure discovery or remote worker hosting.
 This proves local live Neo4j selection connected to the existing verifier. It
 does not establish Aura access, production deployment verification, a portal
 selection screen, Crusoe execution, or generated repair for this graph demo.
+
+### AuraDB Free activation — September 29, 2026
+
+The user authorized creating the free instance and saving its credentials,
+with an explicit **free-only** constraint. The supplied Aura project had no
+instances. A **ProofRun** instance (`abaa7830`) was created on **AuraDB Free**;
+the creation screen showed **$0/hour** and the console confirmed **RUNNING**
+and **AuraDB Free**. No payment method, paid tier or paid provider call was used.
+
+The downloaded database credentials are saved in Git-ignored `.env.neo4j`
+with mode `0600`. Connection uses encrypted `neo4j+s` and driver **6.3.1**.
+No credential values appear in these guides or evidence. Aura management API
+client credentials are separate and were not needed or created.
+
+Fresh acceptance against this real Aura database selected exactly two of three
+synthetic deployments, then completed native local Docker run
+`run-a6b98149bec94ae294f09c45018c5cf1`: **14 checks**, expected regression
+reproduced, **four hash-checked artifacts**, identical retry reuse and rejection
+of old-contract evidence for a later target. A subsequent database query verified
+the stored deployment/run/contract relationship and exact contract hash.
+Evidence: `.commit-watch/neo4j/aura-free-acceptance-1/receipt.json`, `run.json`,
+`database-evidence.json` and `artifacts/`. The previous local-only record above
+remains historical; this new run additionally establishes actual Aura access.
+
+The fixture still executes locally on synthetic inputs. This does not establish
+Crusoe hosting, customer deployment execution, generated repair or a portal
+selection screen. The console states Free instances are deleted after 30 days
+of inactivity; local canonical evidence remains in the worker artifact store.
+
+## 11. Person 1 aggregate deployment — September 29, 2026
+
+The deployed extension is now **0.2.0**, built from the owners' stable release
+and failure-research handoffs against the running **SDK 1.0.6**. The complete
+official build and deployment passed; the running-host federation compatibility
+check also passed. Bundle SHA-256:
+`149d5871a1e01af1ed605d7ed21597f2bd8eb715752e88e8fa4049a97ba1ced7`.
+Frozen extension source, source hashes and bundle receipt are under
+`.commit-watch/person1-duplo-release/`. The prior 0.1.0 bundle is retained.
+
+The fixture worker remains on 8766 and now includes the stable failure-research
+routes. A separate release worker runs on 8767 with the archived synthetic
+evaluation repository and a registry restricted to workspace
+`6abc27f95171566ca109a084`. The backend's private
+`PROOFRUN_RELEASE_WORKER_URL` uses `http://host.docker.internal:8767`.
+No customer repository or staging deployment is configured by this integration.
+Neo4j remains disabled in these regular worker processes.
+
+Actual DuploCloud release gateway execution:
+
+- HTTP 202 accepted `release-c3ad223367bc3fa77da9cdd5f79a7c65f4552d94` through
+  the workspace gateway. This was an API submission, not a browser click.
+- The local Docker runtime reproduced two compatibility regressions and
+  verified the generated `repair-1` candidate. No repair was deployed.
+- The eighth model decision failed strict argument-JSON validation after
+  repair verification. The record correctly retains `agent.status=failed`,
+  `repair-1.status=verified_candidate`, and recommendation `skip`. The workflow's
+  `completed` lifecycle does not mean successful agent completion.
+- All six advertised artifacts downloaded through DuploCloud and matched
+  their exact byte counts and SHA-256 hashes. Receipt:
+  `.commit-watch/person1-duplo-release/gateway-run/receipt.json`.
+- Authentication rejection, scoped target agreement, unknown-run rejection,
+  artifact integrity and unlisted-artifact rejection passed. No second
+  workspace existed, so cross-workspace portal checks were skipped. Existing
+  admin-token checks do not establish non-admin permission enforcement.
+  Receipt: `access-and-artifacts.json` in the same deployment evidence root.
+  The earlier failed preflight used an incorrect workspace-list test endpoint;
+  that receipt is retained, and the test now uses the official admin endpoint.
+
+The release owner's earlier complete live-agent run remains separate evidence
+at `.commit-watch/release-implementation/validation.json`; Person 1 independently
+passed 65 consistency checks on that archive, including all six artifact hashes.
+The research owner's separate live fixture → cited research → generated repair
+flow is recorded at `.commit-watch/failure-research/workflow-4b2b2300/receipt.json`.
+These receipts do not establish browser rendering of those additions.
+
+Remaining Person 1 demonstration gate: sign in at `http://localhost:4210`,
+select `extension-dev`, open **DevOps → ProofRun**, click the visible action,
+and verify the rendered result and artifact download. **Check this release**
+executes the registered fixture; **Investigate a repository release** opens
+the separate release screen. The existing `proofrun.v1` handoff remains valid;
+the additional worker uses `proofrun.release.v1` and the workspace gateway
+documented in `docs/RELEASE-INVESTIGATION.md`. Person 3 still owns real Crusoe
+hosting/evidence; local success does not satisfy that gate.
