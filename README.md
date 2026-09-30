@@ -170,7 +170,23 @@ completed, stopped early or lacked model access. Auxiliary migration patterns
 remain labeled separately; missing model access never becomes a clean review.
 Python/npm, Cargo, Go and Composer manifests and supported lockfiles are parsed;
 other formats and truncated archives are reported as coverage limits. A scan
-does not execute the repository or prove its tests pass.
+does not prove repository correctness. The agent can select existing Python
+`unittest` or Node built-in test files and use `check_patch` to compare original
+and patched temporary snapshots. Tests, dependency files and expected assertions
+are unchanged. At most two comparisons run, each capped at 22 seconds within
+the existing review budget. Docker runs unprivileged, without network access,
+with read-only source and resource limits. Locally prepared `python:3.12-slim`
+and `node:22-alpine` images are resolved to immutable IDs before execution;
+no image pulls, package installations or host repository execution occur.
+
+Reports distinguish a reproduced repository assertion failure from a patch
+passing the selected tests. They retain commands, outputs, image IDs, source,
+patch and test hashes. Missing images/dependencies, unsupported test runners,
+zero tests, skipped tests, errors and timeouts cannot produce a pass. Tests must
+share one directory; complex test output is conservatively inconclusive. This
+uses the repository's existing assertions as the behavior contract, assumes
+honest test reporting, and covers only the bounded retained text snapshot.
+It is not a full-suite run or an independent proof of customer intent.
 
 After a fixture repair passes both pinned environments, the dashboard can create
 a GitHub pull request. The action requires an authenticated `gh` CLI and a
@@ -184,8 +200,9 @@ Public repository scans also show **Create PR** beside source-bound agent
 suggestions with an exact replacement, and supported migration suggestions.
 This targets the scanned repository and uses a public fork
 when the signed-in GitHub CLI account lacks push permission. GitHub permissions
-and repository policies still apply. These PRs explicitly state that tests
-were not run; they are review proposals, not verified repairs. The source is
+and repository policies still apply. These PRs report whether selected tests
+passed or repair verification remains unavailable; they are review proposals.
+The source is
 rechecked at the scanned revision and the default branch must still match it.
 Agent patches must match the hash of the inspected source and the exact reported
 line span; Python replacements must parse. Other languages are not syntax-checked.

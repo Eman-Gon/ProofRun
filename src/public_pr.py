@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from .github_pr import PullRequestError, _run, _SHA
 from .public_repo import normalize_repository, _python_findings, MAX_SOURCE_BYTES
+from .repository_verification import digest
 
 
 def can_propose(finding):
@@ -137,13 +138,22 @@ def create_public_draft(root, scan, finding_index):
     validation = ("The proposed Python source parses successfully. " if PurePosixPath(path).suffix == ".py"
                   else "Syntax and runtime behavior have not been checked. ")
     reproduction = finding.get("reproduction")
+    evidence = finding.get("testEvidence") or {}
+    bound = (evidence.get("commit") == commit and evidence.get("patchSha256") ==
+             digest([path, finding["beforeCode"], finding["afterCode"]]))
+    measured = ("**Selected tests passed:** unchanged repository tests failed on the original snapshot and passed on this proposed patch in Docker. "
+                "This is limited test evidence, not full-suite verification. " if bound and evidence.get("patchStatus") == "passes_selected_tests"
+                else "**Unverified proposal:** a successful repair has not been established. ")
+    if not evidence:
+        measured += "Repository tests were not run. "
+    if bound:
+        validation = f"Test comparison: {evidence.get('status')}; patch: {evidence.get('patchStatus')}. Tests hash: {evidence.get('testsSha256')}. "
     check = f"\n\nSuggested validation (not executed):\n{reproduction}" if reproduction else ""
     title = " ".join(str(finding.get("title") or "Review source fix").split())[:180]
     pull = _run(root, ["api", "--method", "POST", f"repos/{repository}/pulls", "--input", "-"], payload={
         "title": title, "head": head, "base": base, "draft": False,
         "body": (f"Source review suggestion for `{path}:{finding['line']}` at `{commit}`.\n\n"
-                 "**Unverified proposal:** repository tests were not run; a regression or successful repair has not been established. "
-                 f"{validation}Review the intended behavior and run the repository's tests before merging.\n\n"
+                 f"{measured}{validation}Review the intended behavior and run the repository's tests before merging.\n\n"
                  f"{finding['explanation']}{check}\n\nReference: {finding['sourceUrl']}")})
     return _result(pull, repository, branch)
 

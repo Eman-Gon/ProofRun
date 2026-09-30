@@ -349,7 +349,10 @@ function renderRepository() {
   $('repository-findings').replaceChildren();
   for (const [findingIndex, finding] of findings.entries()) {
     const article = node('article', 'repository-finding');
-    article.append(node('span', 'result-badge', finding.origin === 'agent' ? 'Agent finding · unverified' : 'Static finding · unverified'), node('h3', '', finding.title || finding.package || 'Potential issue'),
+    const evidence = finding.testEvidence;
+    const evidenceLabel = evidence?.status === 'test_failure_reproduced' ? 'Repository test failure reproduced'
+      : evidence ? 'Agent finding · reproduction inconclusive' : finding.origin === 'agent' ? 'Agent finding · unverified' : 'Static finding · unverified';
+    article.append(node('span', 'result-badge', evidenceLabel), node('h3', '', finding.title || finding.package || 'Potential issue'),
       node('p', '', finding.explanation || 'Review this source evidence before applying the suggested change.'));
     const diff = node('div', 'diff-card');
     const heading = node('div', 'diff-header');
@@ -371,7 +374,15 @@ function renderRepository() {
       line.append(marker, node('code', '', code));
       diff.append(line);
     }
-    article.append(diff, node('p', 'fix-note', 'Suggested change; not applied or tested.'));
+    article.append(diff, node('p', 'fix-note', evidence?.patchStatus === 'passes_selected_tests'
+      ? 'Proposed patch passed the selected unchanged tests in Docker. Not applied to the repository; full-suite verification is still required.'
+      : 'Suggested change; not applied to the repository. Patch verification has not passed.'));
+    if (evidence) {
+      const measured = node('details', 'finding-reproduction');
+      measured.append(node('summary', '', 'Executed test evidence'), node('p', '', evidence.reason || ''),
+        node('pre', '', JSON.stringify(evidence, null, 2)));
+      article.append(measured);
+    }
     if (finding.reproduction) {
       const reproduction = node('details', 'finding-reproduction');
       reproduction.append(node('summary', '', 'Suggested test'), node('p', '', finding.reproduction));
@@ -537,8 +548,8 @@ function updateRepositoryControls() {
   $('repository-list-status').hidden = !mine || !repositoryListMessage;
   $('repository-list-status').textContent = repositoryListMessage;
   $('repository-note').textContent = mine
-    ? 'Choose one of your public repositories for source review and dependency discovery. Repository code is not executed.'
-    : 'Enter a public GitHub repository for source review and dependency discovery. Repository code is not executed.';
+    ? 'Choose one of your public repositories. The agent may run existing Python or Node tests in isolated Docker.'
+    : 'Enter a public GitHub repository. The agent may run existing Python or Node tests in isolated Docker.';
   const active = state.activeScan?.status === 'running' ? state.activeScan : null;
   $('repository-button').disabled = !connected || submittingRepository || Boolean(active)
     || (mine && (repositoriesLoading || !ownRepositories.length || !$('my-repository-select').value));
@@ -864,7 +875,10 @@ function createPublicPullRequest(scan, findingIndex) {
     target: `scan:${scan.id}:${findingIndex}`, repository: scan.result.repository,
     title: finding.title || 'Suggested fix', file: finding.file, commit: scan.result.commit,
     patch: `--- ${finding.file}\n+++ ${finding.file}\n${String(finding.beforeCode).split('\n').map((line) => `- ${line}`).join('\n')}\n${String(finding.afterCode).split('\n').map((line) => `+ ${line}`).join('\n')}`,
-    evidence: 'Unverified suggestion. Repository tests have not been run. The PR will include this limitation.',
+    evidence: finding.testEvidence?.patchStatus === 'passes_selected_tests'
+      ? 'The patch passed selected unchanged repository tests in Docker after failures on the original source. Full-suite verification and behavior review are still required.'
+      : finding.testEvidence ? 'Test comparison attempted; the patch has not passed verification. Review the recorded outcome before publishing.'
+        : 'Unverified suggestion. Repository tests have not been run. The PR will include this limitation.',
     payload: { scanId: scan.id, findingIndex },
   });
 }
@@ -942,7 +956,9 @@ function openReport() {
   $('report-dialog-title').textContent = item ? `Run report · ${item.repository || item.title}` : `Scan report · ${report.scan.repository}`;
   $('report-dialog-scope').textContent = item
     ? 'Saved comparison evidence and recorded runner output. Opening this report does not start a new run.'
-    : 'Saved source review. Repository tests were not executed; findings and suggested patches remain unverified.';
+    : report.scan.result?.review?.testChecks?.length
+      ? 'Saved source review and Docker test comparisons. Selected tests and exact outcomes are recorded below; this is not full-repository verification.'
+      : 'Saved source review. Repository tests were not executed; findings and suggested patches remain unverified.';
   $('report-dialog-content').textContent = JSON.stringify(report, null, 2);
   $('report-dialog').showModal();
   $('report-dialog-close').focus();

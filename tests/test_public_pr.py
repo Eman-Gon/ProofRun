@@ -121,6 +121,23 @@ def agent_finding(source, path='src/total.ts', **changes):
             'reproduction': 'Assert that total=0 returns zero.', **changes}
 
 
+@pytest.mark.parametrize('stale', [False, True])
+def test_pr_describes_only_evidence_bound_to_its_commit_and_patch(tmp_path, monkeypatch, stale):
+    from src.repository_verification import digest
+    source = b'export function value(total, fallback) {\n  return total || fallback;\n}\n'
+    selected = scan()
+    finding = agent_finding(source)
+    finding['testEvidence'] = {'commit': 'b' * 40 if stale else COMMIT,
+        'patchSha256': digest([finding['file'], finding['beforeCode'], finding['afterCode']]),
+        'status': 'test_failure_reproduced', 'patchStatus': 'passes_selected_tests', 'testsSha256': 'c' * 64}
+    selected['result']['findings'] = [finding]
+    calls, _ = fake_github(monkeypatch, source=source, selected_scan=selected)
+    create_public_draft(tmp_path, selected, 0)
+    body = next(body['body'] for _, body in calls if body and 'draft' in body)
+    assert ('**Selected tests passed:**' in body) is not stale
+    assert 'tests were not run' not in body
+
+
 def test_agent_patch_publishes_non_draft_pr_without_package_allowlist(tmp_path, monkeypatch):
     source = b'export function value(total, fallback) {\n  return total || fallback;\n}\n'
     selected = scan()

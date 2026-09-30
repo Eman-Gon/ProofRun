@@ -318,7 +318,7 @@ def _public_provenance(value, *, injected=False):
     return result
 
 
-def _live_model(config: RepairConfig, messages: list[dict], timeout: float) -> dict:
+def _live_model(config: RepairConfig, messages: list[dict], timeout: float, *, allowed_tools=None) -> dict:
     # Closed string fields are supported by the same strict structured-output
     # contract as repair.py. The arguments string preserves arbitrary nested
     # product inputs without an open-ended JSON-schema object. It is decoded
@@ -335,7 +335,7 @@ def _live_model(config: RepairConfig, messages: list[dict], timeout: float) -> d
             "name": "proofrun_release_action", "strict": True,
             "schema": {"type": "object", "additionalProperties": False,
                        "required": ["tool", "arguments", "reason"],
-                       "properties": {"tool": {"type": "string", "enum": sorted(_TOOLS)},
+                       "properties": {"tool": {"type": "string", "enum": sorted(_TOOLS if allowed_tools is None else allowed_tools)},
                                       "arguments": {"type": "string"}, "reason": {"type": "string"}}},
         }},
     }

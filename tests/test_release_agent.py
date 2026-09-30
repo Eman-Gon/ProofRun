@@ -621,6 +621,17 @@ class ReleaseProviderTests(unittest.TestCase):
         self.assertEqual(response["action"], probe)
         self.assertEqual(messages, original)
 
+    def test_repository_transport_advertises_only_its_actual_tools(self):
+        process = Mock(return_value=process_response())
+        tools = {'read_file', 'list_files', 'search', 'check_patch', 'finish'}
+        with patch.object(agent.subprocess, 'run', process):
+            agent._live_model(RepairConfig(KEY, MODEL), [{'role': 'system', 'content': 'Review'}], 5,
+                              allowed_tools=tools)
+        payload = json.loads(process.call_args.kwargs['input'])
+        advertised = payload['body']['response_format']['json_schema']['schema']['properties']['tool']['enum']
+        self.assertEqual(set(advertised), tools)
+        self.assertNotIn('check_patch', agent._TOOLS)  # Release runtime contract stays unchanged.
+
     def test_parse_failures_retain_only_fixed_stage_and_location_diagnostics(self):
         wire = {"tool": "finish", "arguments": json.dumps({"summary": "Done"}), "reason": "Finish."}
         cases = [

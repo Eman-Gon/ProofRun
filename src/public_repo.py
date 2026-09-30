@@ -1,6 +1,6 @@
 """Bounded, unauthenticated static inspection of public GitHub source snapshots.
 
-No checkout, archive extraction, dependency installation, or repository execution.
+No checkout or dependency installation. Agent-selected tests may run in Docker.
 """
 
 import ast
@@ -504,7 +504,9 @@ def inspect_public_repo(value, emit=None, cancelled=None) -> dict:
         _warn(warnings, "No supported registry dependency declarations were found; installed versions are unknown.")
     scope = ("Bounded source review of one public default-branch commit. The agent selects source reads and literal searches to investigate potential "
              "correctness issues across languages; review status and filesRead record the actual coverage. Findings require exact read-source excerpts "
-             "and remain unverified. No repository code, tests, or installs were run. Existing migration patterns are separate auxiliary hints. "
+             "and remain hypotheses unless accompanied by execution evidence. The agent may compare existing Python unittest or Node built-in tests "
+             "on original and patched temporary copies in isolated Docker; testChecks records attempts, outcomes, commands, image IDs and hashes. "
+             "No dependency installs are run. Selected tests do not prove whole-repository correctness. Existing migration patterns are separate auxiliary hints. "
              "Registry declarations are parsed from supported Python/npm, Cargo, Go, and Composer manifests and lockfiles; unsupported formats are reported. "
              "Local/git/URL dependencies are omitted. Lockfile entries may be transitive, and Go checksums do not establish selected or installed versions. "
              "At most 300 UTF-8 source/configuration/documentation files, 128 KB each, 2 MB total text, 20 MB compressed and 50 MB expanded archive are inspected. "

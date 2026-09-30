@@ -137,11 +137,14 @@ def _explain_agent_result(result):
     paths = review.get("filesRead")
     read_count = len(paths) if isinstance(paths, list) else 0
     status = review.get("status")
+    checks = review.get("testChecks") or []
+    reproduced = sum(row.get("status") == "test_failure_reproduced" for row in agent)
     if status == "completed":
         heading = f"{len(agent)} potential issue{'s' if len(agent) != 1 else ''} to review" if agent else "No concrete issues reported by this review"
         summary = f"The agent read {read_count} of {files} available source, configuration, and manifest files."
         if agent:
-            summary += " Findings cite exact source excerpts, but their triggers and proposed fixes have not been reproduced."
+            summary += (f" Repository-test failures were reproduced for {reproduced} finding{'s' if reproduced != 1 else ''}; consult each test comparison for patch outcomes."
+                        if reproduced else " Findings cite exact source excerpts, but their triggers and proposed fixes have not been reproduced.")
         else:
             summary += " This bounded review found no reportable issues; it does not establish repository correctness."
     else:
@@ -153,7 +156,10 @@ def _explain_agent_result(result):
     locations = _locations(agent or hints)
     if locations:
         summary += f" Start with {locations}."
-    limits = ("No repository code or tests were run. Manifest declarations and lockfile entries do not prove installed versions. "
+    execution_scope = ("Test comparisons were attempted in isolated Docker; inspect their recorded outcomes. Existing repository assertions supply the expected behavior. "
+                       "Only selected tests in the retained text snapshot are covered; missing dependencies and unsupported runners are inconclusive. "
+                       if checks else "No repository code or tests were run. ")
+    limits = (execution_scope + "Manifest declarations and lockfile entries do not prove installed versions. "
               "The agent reviews a bounded subset and can miss bugs; all findings and patches require independent tests.")
     if result.get("warnings"):
         limits = "Review the scan warnings for missing formats, skipped files, or agent availability. " + limits

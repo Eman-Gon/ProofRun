@@ -74,6 +74,15 @@ test('a generic finding opens a truthful preview without publishing', () => {
   assert.equal(h.requests.length, 0);
 });
 
+test('a measured patch preview reports selected-test scope without claiming full verification', () => {
+  const h = harness(() => { throw new Error('Unexpected publication'); });
+  h.run(`state.repositoryScans[0].result.findings[0].testEvidence = {patchStatus:'passes_selected_tests'};
+         createPublicPullRequest(state.repositoryScans[0], 0);`);
+  assert.match(h.element('pr-dialog-evidence').textContent, /passed selected unchanged repository tests/);
+  assert.match(h.element('pr-dialog-evidence').textContent, /Full-suite verification.*still required/);
+  assert.equal(h.requests.length, 0);
+});
+
 test('explicit submission publishes the previewed finding despite a selection change and prevents duplicate requests', async () => {
   let finish;
   const h = harness(() => new Promise((resolve) => { finish = resolve; }));

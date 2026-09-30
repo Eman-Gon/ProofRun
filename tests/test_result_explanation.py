@@ -12,6 +12,14 @@ def result(**changes):
 
 
 class ResultExplanationTests(unittest.TestCase):
+    def test_measured_assertion_failure_is_distinguished_from_a_source_only_hypothesis(self):
+        explanation = explain_public_result(result(review={'status': 'completed', 'filesRead': ['app.py'],
+            'testChecks': [{'status': 'test_failure_reproduced'}]}, findings=[
+                {'origin': 'agent', 'file': 'app.py', 'line': 1, 'status': 'test_failure_reproduced'}]))
+        self.assertIn('reproduced for 1 finding', explanation['summary'])
+        self.assertIn('Existing repository assertions', explanation['limits'])
+        self.assertNotIn('No repository code or tests were run', explanation['limits'])
+
     def test_agent_explanation_uses_actual_coverage_without_package_allowlist(self):
         explanation = explain_public_result(result(dependencies=[{"name": "arbitrary-crate", "ecosystem": "cargo", "version": "2"}],
             review={"status": "completed", "filesRead": ["src/lib.rs"]}))
