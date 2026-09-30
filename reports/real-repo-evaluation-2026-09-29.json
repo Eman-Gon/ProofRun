@@ -1,0 +1,219 @@
+{
+  "checked_at": "2026-09-30T00:34:50.791105+00:00",
+  "scope": "Three real public user repositories; automatic scans plus explicitly manual environment preparation and Docker comparisons of actual commits. No planted changes, no PRs, no remote repository modifications.",
+  "automatic_results": {
+    "reviews_completed": 0,
+    "reviews_partial": 3,
+    "test_checks_executed": 0,
+    "comment": "All scans reached their model time limit; no new bug was dynamically reproduced by the automatic scanner."
+  },
+  "repositories": [
+    {
+      "repository": "Eman-Gon/Writ",
+      "revisions": {
+        "baseline": "e223d56d103cd95d078cf1638ee0d4abe9f9d104",
+        "candidate": "a918150f5fab96a4a9698fd0e9490f99be3726b0"
+      },
+      "automatic_review": {
+        "status": "partial",
+        "summary": "Model operation exceeded its time budget.",
+        "files_read": 5,
+        "eligible_files": 82,
+        "dependency_entries": 25,
+        "agent_findings": 0,
+        "auxiliary_hints": 5,
+        "executed_test_checks": 0,
+        "duration_seconds": 68.5,
+        "evidence": ".commit-watch/real-repo-evaluation/Writ-scan.json"
+      },
+      "manually_prepared_comparisons": {
+        "comparison.json": {
+          "baseline": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:49df860c40c08ea184dc1381021bf4828feef20474acd69fbbd52ebbab7c747a",
+            "test_summary": "4 failed, 18 passed in 0.50s"
+          },
+          "candidate_original_tests": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:49df860c40c08ea184dc1381021bf4828feef20474acd69fbbd52ebbab7c747a",
+            "test_summary": "4 failed, 18 passed in 0.49s"
+          },
+          "candidate_current_tests": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:49df860c40c08ea184dc1381021bf4828feef20474acd69fbbd52ebbab7c747a",
+            "test_summary": "9 failed, 39 passed, 1 warning in 1.55s"
+          }
+        },
+        "comparison-pdf.json": {
+          "baseline": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:0323434ae70458ef5d4790a351a0ae83774092ac2820c8093ed8a4c4e26d6a6e",
+            "test_summary": "22 passed in 1.10s"
+          },
+          "candidate-original-tests": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:0323434ae70458ef5d4790a351a0ae83774092ac2820c8093ed8a4c4e26d6a6e",
+            "test_summary": "22 passed in 0.72s"
+          },
+          "candidate": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:0323434ae70458ef5d4790a351a0ae83774092ac2820c8093ed8a4c4e26d6a6e",
+            "test_summary": "48 passed, 1 warning in 1.25s"
+          }
+        }
+      },
+      "conclusion": "Python demo readiness issue: pypdf is absent from declared dependencies and pdftotext is unavailable in the clean Python image. Original tests: 4 failed/18 passed on both revisions. Current tests: 9 failed/39 passed. Adding only pypdf to the same image produces 22 original tests passing on both revisions and all 48 current tests passing. Existing setup gap, not a newly introduced regression.",
+      "hint_review": "Five nullable-field migration hints did not establish defects. DecisionRecord fields are explicitly populated, including None, in gateway/evaluate.py."
+    },
+    {
+      "repository": "Eman-Gon/ClearLine",
+      "revisions": {
+        "baseline": "bd28a0551f8700b74ac40041ff45180b26b73a12",
+        "candidate": "5a38d2ff35ee18b75e9c0ab5cba13ef2a076ec30"
+      },
+      "automatic_review": {
+        "status": "partial",
+        "summary": "Model operation exceeded its time budget.",
+        "files_read": 5,
+        "eligible_files": 201,
+        "dependency_entries": 9,
+        "agent_findings": 0,
+        "auxiliary_hints": 0,
+        "executed_test_checks": 0,
+        "duration_seconds": 68.2,
+        "evidence": ".commit-watch/real-repo-evaluation/ClearLine-scan.json"
+      },
+      "manually_prepared_comparisons": {
+        "comparison.json": {
+          "baseline": {
+            "execution_status": "completed",
+            "exit_code": 2,
+            "image": "sha256:a5ab4597da2f98189115f0a9ff416c0fa656d65dcfe9a51ca0dbce2bf14b5458",
+            "test_summary": "2 warnings, 1 error in 0.90s"
+          },
+          "candidate_original_tests": {
+            "execution_status": "completed",
+            "exit_code": 2,
+            "image": "sha256:a5ab4597da2f98189115f0a9ff416c0fa656d65dcfe9a51ca0dbce2bf14b5458",
+            "test_summary": "2 warnings, 1 error in 1.15s"
+          },
+          "candidate_current_tests": {
+            "execution_status": "completed",
+            "exit_code": 2,
+            "image": "sha256:a5ab4597da2f98189115f0a9ff416c0fa656d65dcfe9a51ca0dbce2bf14b5458",
+            "test_summary": "2 warnings, 1 error in 0.69s"
+          }
+        },
+        "comparison-configured.json": {
+          "baseline": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:a5ab4597da2f98189115f0a9ff416c0fa656d65dcfe9a51ca0dbce2bf14b5458",
+            "test_summary": "1 failed, 58 passed, 6 skipped, 2 warnings, 7 subtests passed in 2.81s"
+          },
+          "candidate-original-tests": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:a5ab4597da2f98189115f0a9ff416c0fa656d65dcfe9a51ca0dbce2bf14b5458",
+            "test_summary": "1 failed, 58 passed, 6 skipped, 2 warnings, 7 subtests passed in 2.41s"
+          },
+          "candidate": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:a5ab4597da2f98189115f0a9ff416c0fa656d65dcfe9a51ca0dbce2bf14b5458",
+            "test_summary": "1 failed, 58 passed, 6 skipped, 2 warnings, 7 subtests passed in 2.30s"
+          }
+        },
+        "comparison-ffmpeg.json": {
+          "baseline": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:cd1aa95aa14c329844d6f5f0cb9501e5a6a7847dc996108cb89d2c8ec0f34854",
+            "test_summary": "65 passed, 2 warnings, 7 subtests passed in 4.41s"
+          },
+          "candidate-original-tests": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:cd1aa95aa14c329844d6f5f0cb9501e5a6a7847dc996108cb89d2c8ec0f34854",
+            "test_summary": "65 passed, 2 warnings, 7 subtests passed in 2.23s"
+          },
+          "candidate": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:cd1aa95aa14c329844d6f5f0cb9501e5a6a7847dc996108cb89d2c8ec0f34854",
+            "test_summary": "65 passed, 2 warnings, 7 subtests passed in 2.35s"
+          }
+        }
+      },
+      "conclusion": "After using existing settings for writable temporary DB/uploads and supplying ffmpeg, all 65 backend tests plus 7 subtests pass before and after the latest change. No regression observed in this suite. Initial failures were sandbox setup gaps."
+    },
+    {
+      "repository": "Eman-Gon/fp-multimodel",
+      "revisions": {
+        "baseline": "4cdb8c0c09f0fa5c0aaca2001ca1f7793867970b",
+        "candidate": "61279f3644d77a36c3cb20cf9e97f88d74526eec"
+      },
+      "automatic_review": {
+        "status": "partial",
+        "summary": "Model operation exceeded its time budget.",
+        "files_read": 6,
+        "eligible_files": 110,
+        "dependency_entries": 173,
+        "agent_findings": 0,
+        "auxiliary_hints": 0,
+        "executed_test_checks": 0,
+        "duration_seconds": 68.7,
+        "evidence": ".commit-watch/real-repo-evaluation/fp-multimodel-scan.json"
+      },
+      "manually_prepared_comparisons": {
+        "comparison.json": {
+          "baseline": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:828963118f6838ebdaf6b01b9b24d10c5dffe2f4aaf3ebca33d0d3f74366833e",
+            "test_summary": "# duration_ms 484.615542"
+          },
+          "candidate-original-tests": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:828963118f6838ebdaf6b01b9b24d10c5dffe2f4aaf3ebca33d0d3f74366833e",
+            "test_summary": "# duration_ms 253.595375"
+          },
+          "baseline-new-test": {
+            "execution_status": "completed",
+            "exit_code": 1,
+            "image": "sha256:828963118f6838ebdaf6b01b9b24d10c5dffe2f4aaf3ebca33d0d3f74366833e",
+            "test_summary": "# duration_ms 244.726083"
+          },
+          "candidate": {
+            "execution_status": "completed",
+            "exit_code": 0,
+            "image": "sha256:828963118f6838ebdaf6b01b9b24d10c5dffe2f4aaf3ebca33d0d3f74366833e",
+            "test_summary": "# duration_ms 240.292125"
+          }
+        }
+      },
+      "conclusion": "Targeted Pegasus suite: six original tests pass on both commits. The candidate schema assertion fails on baseline (6 pass/1 fail) and passes on candidate (7 pass). This confirms the repository\u2019s existing fix against its own assertion, not a newly discovered bug or live provider compatibility."
+    }
+  ],
+  "limitations": [
+    "Python comparisons use the same prepared current-dependency environment for both revisions; not a reconstruction of historical dependency resolutions.",
+    "fp-multimodel comparison includes only the Pegasus module and its dependencies/tests, executed with native Node 22 type stripping rather than the project tsx command. No full UI build or complete suite.",
+    "No Android compilation, real phone calls, live external project-provider requests, or production execution.",
+    "Passing selected tests does not prove absence of untested regressions.",
+    "Real-world sample size is three; no reliability rate beyond this sample is inferred."
+  ],
+  "recommended_priorities": [
+    "Discover and prepare declared Python/system dependencies and writable data paths.",
+    "Accept baseline and candidate revisions and focus investigation on changed code and affected tests.",
+    "Support pytest and TypeScript runners through approved runtime definitions.",
+    "Reserve enough budget to finish and retain useful findings; do not present partial reviews as clean results.",
+    "Separate setup failures, existing failures, update regressions, and improvements in the report."
+  ]
+}
