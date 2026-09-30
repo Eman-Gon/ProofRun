@@ -158,6 +158,141 @@ def create_public_draft(root, scan, finding_index):
     return _result(pull, repository, branch)
 
 
+def combined_candidate(original, findings):
+    """Validate against the original snapshot, then apply nonoverlapping spans backwards."""
+    try:
+        text = original.decode("utf-8-sig")
+    except UnicodeError:
+        raise PullRequestError("Source is not UTF-8. Review it manually.") from None
+    spans = {}
+    for finding in findings:
+        candidate(original, finding)
+        lines = text.splitlines(keepends=True)
+        line = finding["line"] - 1
+        start = sum(map(len, lines[:line])) + lines[line].index(finding["beforeCode"].splitlines()[0])
+        span = (start, start + len(finding["beforeCode"]))
+        if span in spans and spans[span] != finding["afterCode"]:
+            raise PullRequestError("Conflicting suggestions overlap. Review them individually.")
+        spans[span] = finding["afterCode"]
+    previous_end = -1
+    for start, end in sorted(spans):
+        if start < previous_end:
+            raise PullRequestError("Conflicting suggestions overlap. Review them individually.")
+        previous_end = end
+    for (start, end), replacement in sorted(spans.items(), reverse=True):
+        text = text[:start] + replacement + text[end:]
+    if PurePosixPath(findings[0]["file"]).suffix == ".py":
+        try:
+            ast.parse(text)
+        except (SyntaxError, ValueError, RecursionError):
+            raise PullRequestError("The combined Python patch does not parse. Review suggestions individually.") from None
+    return (b"\xef\xbb\xbf" if original.startswith(b"\xef\xbb\xbf") else b"") + text.encode("utf-8")
+
+
+def create_public_batch(root, scan):
+    if scan.get("status") != "completed" or not isinstance(scan.get("result"), dict):
+        raise PullRequestError("A completed public repository scan is required.")
+    result = scan["result"]
+    findings = result.get("findings", [])
+    selected = [(i, row) for i, row in enumerate(findings) if can_propose(row)]
+    if not selected:
+        raise PullRequestError("No exact patches are available for this scan.")
+    repository = normalize_repository(result["repository"])
+    commit = result.get("commit", "")
+    grouped = {}
+    for index, finding in selected:
+        path = finding.get("file", "")
+        if (not _SHA.fullmatch(commit) or not path or PurePosixPath(path).is_absolute()
+                or any(p in {"", ".", ".."} for p in path.split("/")) or "\\" in path
+                or any(ord(c) < 32 for c in path)):
+            raise PullRequestError("The scan has invalid source coordinates. Scan the repository again.")
+        grouped.setdefault(path, []).append(finding)
+    repo = _run(root, ["api", f"repos/{repository}"])
+    if repo.get("private") is not False or repo.get("archived") or repo.get("disabled"):
+        raise PullRequestError("PRs require an active public repository.")
+    base = repo.get("default_branch")
+    if not isinstance(base, str) or not base:
+        raise PullRequestError("The repository has no default branch.")
+    patches = {}
+    for path, rows in sorted(grouped.items()):
+        original, _ = _content(root, repository, path, commit)
+        patches[path] = combined_candidate(original, rows)
+        if patches[path] == original:
+            raise PullRequestError("Combined suggestions cancel out. Review them individually.")
+    key = digest([repository, commit, [(p, hashlib.sha256(v).hexdigest()) for p, v in patches.items()]])[:20]
+    branch = "codex/proofrun-all-" + key
+    user = _run(root, ["api", "user"]).get("login")
+    if not isinstance(user, str) or not user or "/" in user:
+        raise PullRequestError("Sign in with GitHub CLI before creating a PR.")
+    writable = repo.get("permissions", {}).get("push") is True
+    destination = repository if writable else f"{user}/{repository.split('/')[1]}"
+    head = destination.split('/')[0] + ":" + branch
+    # Reuse the same PR on retries, including after an ambiguous network response.
+    existing = _run(root, ["api", f"repos/{repository}/pulls?state=all&head={quote(head, safe='')}",
+                           "--jq", "{items: .}"]).get("items", [])
+    if existing:
+        pull = existing[0]
+        if pull.get("state") != "open":
+            raise PullRequestError("A PR for this suggestion was already closed. Review it on GitHub before retrying.")
+        response = _result(pull, repository, branch)
+        response["findingIndices"] = [i for i, _ in selected]
+        return response
+    current = _run(root, ["api", f"repos/{repository}/git/ref/heads/{quote(base, safe='/')}"])
+    if current.get("object", {}).get("sha") != commit:
+        raise PullRequestError("The default branch changed since this scan. Check the repository again before creating a PR.")
+    if not writable:
+        fork = _run(root, ["api", "--method", "POST", f"repos/{repository}/forks", "--input", "-"], payload={})
+        if (fork.get("full_name") != destination or fork.get("parent", {}).get("full_name", "").lower() != repository.lower()
+                or fork.get("private") is not False):
+            raise PullRequestError("GitHub could not prepare a matching public fork. Check your account and retry.")
+    refs = _run(root, ["api", f"repos/{destination}/git/matching-refs/heads/{branch}",
+                      "--jq", "{items: .}"]).get("items", [])
+    matching = [ref for ref in refs if ref.get("ref") == "refs/heads/" + branch]
+    if matching:
+        detail = _run(root, ["api", f"repos/{destination}/commits/{branch}?per_page=100"])
+        if ([p.get("sha") for p in detail.get("parents", [])] != [commit]
+                or sorted(f.get("filename") for f in detail.get("files", [])) != sorted(patches)):
+            raise PullRequestError("The proposal branch contains other changes. Review it on GitHub.")
+        for path, repaired in patches.items():
+            branch_bytes, _ = _content(root, destination, path, branch)
+            if branch_bytes != repaired:
+                raise PullRequestError("The proposal branch was modified. Review it on GitHub before retrying.")
+    else:
+        base_commit = _run(root, ["api", f"repos/{repository}/git/commits/{commit}"])
+        tree = []
+        for path, repaired in patches.items():
+            blob = _run(root, ["api", "--method", "POST", f"repos/{destination}/git/blobs", "--input", "-"],
+                        payload={"content": base64.b64encode(repaired).decode(), "encoding": "base64"})
+            # Preserve executable bits and reject symlinks/submodules.
+            parent = str(PurePosixPath(path).parent)
+            entry_tree = base_commit["tree"]["sha"]
+            for part in ([] if parent == "." else parent.split("/")):
+                entries = _run(root, ["api", f"repos/{repository}/git/trees/{entry_tree}"])["tree"]
+                entry_tree = next(e["sha"] for e in entries if e["path"] == part and e["type"] == "tree")
+            entries = _run(root, ["api", f"repos/{repository}/git/trees/{entry_tree}"])["tree"]
+            entry = next(e for e in entries if e["path"] == PurePosixPath(path).name)
+            if entry.get("mode") not in {"100644", "100755"}:
+                raise PullRequestError("Only regular source files can be patched.")
+            tree.append({"path": path, "mode": entry["mode"], "type": "blob", "sha": blob["sha"]})
+        updated_tree = _run(root, ["api", "--method", "POST", f"repos/{destination}/git/trees", "--input", "-"],
+                            payload={"base_tree": base_commit["tree"]["sha"], "tree": tree})
+        updated_commit = _run(root, ["api", "--method", "POST", f"repos/{destination}/git/commits", "--input", "-"],
+                              payload={"message": "fix: apply all source review suggestions", "tree": updated_tree["sha"], "parents": [commit]})
+        _run(root, ["api", "--method", "POST", f"repos/{destination}/git/refs", "--input", "-"],
+             payload={"ref": "refs/heads/" + branch, "sha": updated_commit["sha"]})
+    descriptions = "\n".join(f"- `{row['file']}:{row['line']}`: {row.get('title', 'Source suggestion')}" for _, row in selected)
+    skipped = len(findings) - len(selected)
+    pull = _run(root, ["api", "--method", "POST", f"repos/{repository}/pulls", "--input", "-"], payload={
+        "title": f"fix: address {len(selected)} source review findings", "head": head, "base": base, "draft": False,
+        "body": (f"Combined source suggestions at `{commit}`.\n\n{descriptions}\n\n"
+                 f"{skipped} findings without exact patches require manual review.\n\n"
+                 "**Unverified combined proposal:** Python source parses, but the combined patch has not been tested. "
+                 "Individual patch test results do not verify this combined change. Review behavior and run repository tests before merging.")})
+    response = _result(pull, repository, branch)
+    response["findingIndices"] = [i for i, _ in selected]
+    return response
+
+
 def _result(pull, repository, branch):
     number = pull.get("number")
     if type(number) is not int or pull.get("html_url") != f"https://github.com/{repository}/pull/{number}":

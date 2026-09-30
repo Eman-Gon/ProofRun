@@ -228,7 +228,104 @@ def test_http_public_pr_requires_csrf_and_dispatches_scan(tmp_path, monkeypatch)
         status, response = request(body)
         assert status == 201
         assert response['pullRequest']['repository'] == 'other/public-project'
+        expected = {'number': 9, 'findingIndices': [0]}
+        monkeypatch.setattr('src.dashboard.create_public_batch', lambda *args: expected)
+        assert request({**body, 'findingIndex': 'all'}, token=False)[0] == 403
+        assert request({**body, 'findingIndex': 'all'}) == (201, {'pullRequest': expected})
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def batch_scan():
+    source = SOURCE + b'    apartment: str | None\n'
+    result = scan()
+    result['result']['findings'] = _python_findings('src/customer.py', source.decode(), [])
+    result['result']['findings'] += _python_findings('src/address.py', SOURCE.decode(), [])
+    result['result']['findings'].append({'title': 'Manual review required'})
+    return result, {'src/customer.py': source, 'src/address.py': SOURCE}
+
+
+def test_combined_candidate_uses_original_coordinates_and_rejects_overlap():
+    from src.public_pr import combined_candidate
+    selected, sources = batch_scan()
+    rows = selected['result']['findings'][:2]
+    repaired = combined_candidate(sources['src/customer.py'], rows)
+    assert repaired.count(b'= None') == 2
+    original = b'x = 1\ny = 2\n'
+    def finding(line, before, after):
+        import hashlib
+        return {'origin': 'agent', 'file': 'a.py', 'line': line, 'beforeCode': before,
+                'afterCode': after, 'sourceSha256': hashlib.sha256(original).hexdigest()}
+    rows = [finding(1, 'x = 1', 'x = 3\nz = 4'), finding(2, 'y = 2', 'y = 5')]
+    assert combined_candidate(original, rows) == b'x = 3\nz = 4\ny = 5\n'
+    with pytest.raises(PullRequestError, match='overlap'):
+        combined_candidate(original, rows + [finding(1, 'x = 1\ny = 2', 'x = 6')])
+
+
+@pytest.mark.parametrize('push', [True, False])
+def test_batch_creates_one_atomic_commit_and_pr(tmp_path, monkeypatch, push):
+    from src.public_pr import create_public_batch
+    selected, sources = batch_scan()
+    calls = []
+    def run(root, args, *, payload=None):
+        calls.append((args, payload))
+        endpoint = next((x for x in args if x.startswith('repos/')), '')
+        if args == ['api', 'user']:
+            return {'login': 'writer'}
+        if endpoint == 'repos/other/public-project':
+            return {'private': False, 'default_branch': 'main', 'permissions': {'push': push}}
+        if '/contents/' in endpoint:
+            path = endpoint.split('/contents/')[1].split('?')[0]
+            return {'type': 'file', 'sha': 'b' * 40, 'content': base64.b64encode(sources[path]).decode()}
+        if '/pulls?' in endpoint or '/matching-refs/' in endpoint:
+            return {'items': []}
+        if endpoint.endswith('/git/ref/heads/main'):
+            return {'object': {'sha': COMMIT}}
+        if endpoint.endswith('/forks'):
+            return {'full_name': 'writer/public-project', 'private': False, 'parent': {'full_name': 'other/public-project'}}
+        if endpoint.endswith('/git/commits/' + COMMIT):
+            return {'tree': {'sha': 'tree-base'}}
+        if endpoint.endswith('/git/trees/tree-base'):
+            return {'tree': [{'path': 'src', 'type': 'tree', 'sha': 'tree-src'}]}
+        if endpoint.endswith('/git/trees/tree-src'):
+            return {'tree': [{'path': 'customer.py', 'mode': '100755'}, {'path': 'address.py', 'mode': '100644'}]}
+        if endpoint.endswith('/pulls'):
+            return {'html_url': 'https://github.com/other/public-project/pull/7', 'number': 7}
+        return {'sha': 'd' * 40}
+    monkeypatch.setattr('src.public_pr._run', run)
+    result = create_public_batch(tmp_path, selected)
+    assert result['findingIndices'] == [0, 1, 2]
+    bodies = [body for _, body in calls if body]
+    blobs = [base64.b64decode(body['content']) for body in bodies if 'content' in body]
+    assert sorted(blob.count(b'= None') for blob in blobs) == [1, 2]
+    tree = next(body['tree'] for body in bodies if 'base_tree' in body)
+    assert [(row['path'], row['mode']) for row in tree] == [('src/address.py', '100644'), ('src/customer.py', '100755')]
+    assert len([body for body in bodies if 'parents' in body]) == 1
+    assert len([body for body in bodies if 'ref' in body]) == 1
+    pr = [body for body in bodies if 'head' in body]
+    assert len(pr) == 1
+    assert '1 findings without exact patches' in pr[0]['body']
+    assert 'combined patch has not been tested' in pr[0]['body']
+
+
+@pytest.mark.parametrize('mode', ['stale', 'existing', 'changed_branch'])
+def test_batch_retry_and_staleness(tmp_path, monkeypatch, mode):
+    from src.public_pr import create_public_batch
+    calls, _ = fake_github(monkeypatch, **{mode: True})
+    if mode == 'existing':
+        assert create_public_batch(tmp_path, scan())['findingIndices'] == [0]
+    else:
+        with pytest.raises(PullRequestError):
+            create_public_batch(tmp_path, scan())
+    assert all(payload is None for _, payload in calls)
+
+
+def test_batch_dashboard_tracks_all_included_findings(tmp_path, monkeypatch):
+    dashboard = Dashboard(tmp_path)
+    dashboard.repository_scans = [scan()]
+    expected = {'number': 7, 'findingIndices': [0, 1]}
+    monkeypatch.setattr('src.dashboard.create_public_batch', lambda *args: expected)
+    assert dashboard.create_public_pull_request('scan-one', 'all')[0] == 201
+    assert dashboard.repository_scans[0]['pullRequests'] == {'all': expected, '0': expected, '1': expected}

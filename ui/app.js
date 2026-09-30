@@ -312,7 +312,7 @@ function renderRepository() {
   const scan = selectedScan();
   $('repository-content').hidden = !scan;
   if (!scan) return;
-  const signature = JSON.stringify(scan);
+  const signature = JSON.stringify([scan, submittingPr, connected]);
   if (signature === lastScanSignature) return;
   lastScanSignature = signature;
   const result = scan.status === 'completed' && scan.result ? scan.result : {};
@@ -347,6 +347,28 @@ function renderRepository() {
     $('repository-explanation-' + id).textContent = hasExplanation && typeof explanation[field] === 'string' ? explanation[field] : '';
   }
   $('repository-findings').replaceChildren();
+  if (!running && !failed && findings.length) {
+    const controls = node('div', 'repository-finding');
+    const eligible = findings.filter(canProposeFinding).length;
+    const proposal = scan.pullRequests?.all;
+    if (proposal) {
+      const link = node('a', 'button primary compact', `View combined PR #${proposal.number} ↗`);
+      setLink(link, proposal.url);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      controls.append(link);
+    } else {
+      const pending = submittingPr?.target === `scan:${scan.id}:all`;
+      const button = node('button', 'button primary', pending ? 'Creating PR…' : 'Fix all issues · Create PR');
+      button.disabled = !eligible || !state.repositoryScans.some((item) => item.id === scan.id) || Boolean(submittingPr) || !connected;
+      button.setAttribute('aria-busy', String(pending));
+      button.addEventListener('click', () => createAllPublicPullRequest(scan));
+      controls.append(button);
+    }
+    controls.append(node('p', 'fix-note', `${eligible} of ${findings.length} findings have exact patches. Preview them together in one PR. ${findings.length - eligible} require manual review. The combined patch has not been tested.`));
+    $('repository-findings').append(controls);
+  }
+
   for (const [findingIndex, finding] of findings.entries()) {
     const article = node('article', 'repository-finding');
     const evidence = finding.testEvidence;
@@ -390,9 +412,7 @@ function renderRepository() {
     }
     const proposal = scan.pullRequests?.[findingIndex];
     const currentScan = state.repositoryScans.some((item) => item.id === scan.id);
-    const canPropose = typeof finding.beforeCode === 'string' && typeof finding.afterCode === 'string'
-      && finding.beforeCode.length > 0 && finding.afterCode.length > 0 && finding.beforeCode !== finding.afterCode
-      && new TextEncoder().encode(finding.beforeCode).length <= 4000 && new TextEncoder().encode(finding.afterCode).length <= 4000;
+    const canPropose = canProposeFinding(finding);
     if (proposal) {
       const link = node('a', 'button secondary compact', `View PR #${proposal.number} ↗`);
       setLink(link, proposal.url);
@@ -401,7 +421,7 @@ function renderRepository() {
       article.append(link);
     } else {
       const pending = submittingPr?.target === `scan:${scan.id}:${findingIndex}`;
-      const button = node('button', 'button primary compact', pending ? 'Creating PR…' : 'Create PR');
+      const button = node('button', 'button primary compact', pending ? 'Creating PR…' : 'Create PR for this issue');
       button.setAttribute('aria-busy', String(pending));
       button.disabled = !canPropose || !currentScan || submittingPr || !connected;
       button.addEventListener('click', () => createPublicPullRequest(scan, findingIndex));
@@ -868,6 +888,33 @@ function showPrPreview(proposal) {
   $('pr-dialog-cancel').focus();
 }
 
+function canProposeFinding(finding) {
+  return typeof finding.beforeCode === 'string' && typeof finding.afterCode === 'string'
+    && finding.beforeCode.length > 0 && finding.afterCode.length > 0 && finding.beforeCode !== finding.afterCode
+    && !finding.beforeCode.includes('\0') && !finding.afterCode.includes('\0')
+    && new TextEncoder().encode(finding.beforeCode).length <= 4000 && new TextEncoder().encode(finding.afterCode).length <= 4000
+    && Number.isInteger(finding.line) && finding.line > 0
+    && (finding.origin === 'agent' ? /^[0-9a-f]{64}$/.test(finding.sourceSha256 || '')
+      : ['pandas-hour', 'pydantic-optional'].includes(String(finding.id || '').split(':')[0]));
+}
+
+function createAllPublicPullRequest(scan) {
+  if (scan.status !== 'completed' || !connected) return;
+  const findings = scan.result?.findings || [];
+  const eligible = findings.filter(canProposeFinding);
+  if (!eligible.length) return;
+  const skipped = findings.filter((finding) => !canProposeFinding(finding));
+  showPrPreview({
+    target: `scan:${scan.id}:all`, repository: scan.result.repository || scan.repository,
+    title: `Fix ${eligible.length} issues in one PR`, commit: scan.result.commit,
+    file: `${new Set(eligible.map((finding) => finding.file)).size} source files`,
+    patch: eligible.map((finding) => `${finding.file}:${finding.line} — ${finding.title}\n− ${finding.beforeCode}\n+ ${finding.afterCode}`).join('\n\n'),
+    evidence: `The combined patch has not been tested. Individual test results do not verify the combined change. ${skipped.length} findings require manual review.`
+      + (skipped.length ? ` Skipped: ${skipped.map((finding) => `${finding.file}:${finding.line} — ${finding.title}`).join('; ')}` : ''),
+    payload: { scanId: scan.id, findingIndex: 'all' },
+  });
+}
+
 function createPublicPullRequest(scan, findingIndex) {
   const finding = scan.result?.findings?.[findingIndex];
   if (!finding || scan.status !== 'completed' || !connected) return;
@@ -917,7 +964,10 @@ async function publishPullRequest() {
     if (!response.ok) throw new Error(result.error || 'Unable to create the PR.');
     if (proposal.payload.scanId) {
       const current = state.repositoryScans.find((item) => item.id === proposal.payload.scanId);
-      if (current) current.pullRequests = { ...current.pullRequests, [proposal.payload.findingIndex]: result.pullRequest };
+      if (current) {
+        current.pullRequests = { ...current.pullRequests, [proposal.payload.findingIndex]: result.pullRequest };
+        for (const index of result.pullRequest.findingIndices || []) current.pullRequests[index] = result.pullRequest;
+      }
     } else {
       const current = state.cases.find((item) => item.id === proposal.payload.caseId);
       if (current?.pullRequest) current.pullRequest.result = result.pullRequest;

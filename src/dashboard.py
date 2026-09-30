@@ -25,7 +25,7 @@ from .public_repo import PublicRepoError, inspect_public_repo, list_public_repos
 from .result_explanation import explain_public_result
 from .demo_ready import load_demo_ready
 from .github_pr import PullRequestError, create_draft, eligible as pr_eligible, _repository as pr_repository
-from .public_pr import create_public_draft
+from .public_pr import create_public_draft, create_public_batch
 from .dashboard_band import band_observation
 
 
@@ -301,9 +301,12 @@ class Dashboard:
         if not self.public_pr_lock.acquire(blocking=False):
             return 409, {"error": "A PR request is already in progress. Please wait."}
         try:
-            result = create_public_draft(self.root, scan, finding_index)
+            result = (create_public_batch(self.root, scan) if finding_index == "all"
+                      else create_public_draft(self.root, scan, finding_index))
             with self.lock:
                 scan.setdefault("pullRequests", {})[str(finding_index)] = result
+                for index in result.get("findingIndices", []):
+                    scan["pullRequests"][str(index)] = result
             return 201, {"pullRequest": result}
         except (PullRequestError, PublicRepoError) as exc:
             return 409, {"error": str(exc)}
@@ -581,7 +584,8 @@ def make_server(root=ROOT, port=8765):
                 elif self.path == "/api/pull-requests":
                     if not ((set(payload) == {"caseId"} and isinstance(payload["caseId"], str))
                             or (set(payload) == {"scanId", "findingIndex"} and isinstance(payload["scanId"], str)
-                                and type(payload["findingIndex"]) is int and payload["findingIndex"] >= 0)):
+                                and ((type(payload["findingIndex"]) is int and payload["findingIndex"] >= 0)
+                                     or payload["findingIndex"] == "all"))):
                         raise ValueError
                 elif (set(payload) not in ({"caseId"}, {"caseId", "mode"})
                       or not isinstance(payload["caseId"], str) or not isinstance(payload.get("mode", "offline"), str)):
