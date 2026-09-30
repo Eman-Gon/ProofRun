@@ -1,0 +1,67 @@
+{
+  "checked_at": "2026-09-30T00:20:09.336629+00:00",
+  "overall": "partial: Similarweb provider access denied",
+  "checks": [
+    {
+      "integration": "DuploCloud, OpenRouter, BAND, native Docker",
+      "status": "passed_live",
+      "run_id": "run-a01b17d9615a441b872bd146387e5ece",
+      "repair_status": "verified",
+      "checks_passed": 14,
+      "hash_verified_artifacts": 11,
+      "evidence": ".commit-watch/api-recheck/api-resource-6abc557a2d7a1aee08123fa2/receipt.json",
+      "scope": "API-initiated synthetic fixture through deployed gateway; not browser-initiated"
+    },
+    {
+      "integration": "Crusoe inference with BAND",
+      "status": "passed_live",
+      "evidence": ".commit-watch/api-recheck/crusoe-band/receipt.json",
+      "scope": "Direct live adapter; 14 repair checks; not a primary-provider rejection followed by retry and not Crusoe hosting"
+    },
+    {
+      "integration": "Failure research",
+      "status": "passed_live",
+      "source_count": 5,
+      "evidence": ".commit-watch/api-recheck/failure-research.json"
+    },
+    {
+      "integration": "Neo4j",
+      "status": "passed_live",
+      "scope": "Read-only RETURN 1 and authenticated evidence graph with 45 nodes",
+      "evidence": ".commit-watch/api-recheck/evidence-graph.json"
+    },
+    {
+      "integration": "GitHub",
+      "status": "passed_live_read",
+      "scope": "Authenticated user API; no PR publication attempted"
+    },
+    {
+      "integration": "Similarweb",
+      "status": "blocked",
+      "reason": "Provider denied the configured key or endpoint/country subscription access; worker returned an honest unavailable report. No traffic metric obtained.",
+      "domain": "github.com",
+      "month": "2026-08",
+      "evidence": ".commit-watch/api-recheck/similarweb.json"
+    },
+    {
+      "integration": "Fixture and release APIs",
+      "status": "passed_scoped_checks",
+      "scope": "Authentication and registry checks; six historical release artifacts freshly retrieved and hash-verified. No new full release investigation.",
+      "evidence": ".commit-watch/api-recheck/release-api.json"
+    }
+  ],
+  "automated_tests": {
+    "api_integration_suite_passed": 259,
+    "additional_judge_research_dashboard_suite_passed": 147,
+    "note": "Suites overlap; counts are not a unique total. Mocked transports do not establish live provider access."
+  },
+  "fixes": [
+    "Reloaded idle fixture worker from main .env so BAND is active; verified via a fresh DuploCloud run.",
+    "Moved stream=False into LiteLLM params in the legacy Groq/Strands adapter; actual SDK with mocked transport now passes. No live Groq request made."
+  ],
+  "limitations": [
+    "Similarweb entitlement or API credentials need account-side attention.",
+    "No PR published, no production deployment, no hosting or account changes.",
+    "Provider success and passing declared fixture checks do not prove arbitrary-repository correctness."
+  ]
+}

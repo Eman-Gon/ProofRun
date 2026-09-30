@@ -139,8 +139,7 @@ def _make_agent(api_key: str):
     model = provider.LiteLLMModel(
         model_id="groq/openai/gpt-oss-120b",
         client_args={"api_key": api_key, "num_retries": 0, "max_retries": 0, "timeout": 60},
-        stream=False,
-        params={"temperature": 0, "max_tokens": 1600, "response_format": {"type": "json_object"}},
+        params={"stream": False, "temperature": 0, "max_tokens": 1600, "response_format": {"type": "json_object"}},
     )
     return strands.Agent(
         model=model, tools=[], system_prompt=SYSTEM_PROMPT, callback_handler=None,

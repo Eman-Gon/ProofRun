@@ -180,7 +180,7 @@ class AgentConfigurationTests(unittest.TestCase):
         self.assertEqual(arguments["client_args"]["num_retries"], 0)
         self.assertEqual(arguments["client_args"]["max_retries"], 0)
         self.assertEqual(arguments["params"]["response_format"], {"type": "json_object"})
-        self.assertFalse(arguments["stream"])
+        self.assertFalse(arguments["params"]["stream"])
         arguments = strands.Agent.call_args.kwargs
         self.assertIs(arguments["model"], provider.LiteLLMModel.return_value)
         self.assertEqual(arguments["tools"], [])
