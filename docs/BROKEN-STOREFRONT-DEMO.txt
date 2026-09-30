@@ -1,0 +1,129 @@
+ProofRun: broken storefront demo
+Presenter script — approximately 3 minutes
+
+Example: https://github.com/Eman-Gon/proofrun-broken-demo
+Dashboard: http://localhost:8765
+Pinned example revision: 1368aaaa4f2e3f0d91f70b86a4c8c37f79485d1b
+
+Before presenting
+
+Open the dashboard and this repository's README in separate tabs. The current
+dashboard header says "Hackday Idea"; the project being demonstrated is ProofRun.
+Keep the terminal demonstration ready before recording so dependency setup is
+outside the presentation. The terminal helper is a separate local demonstration;
+its results do not change the dashboard's verification status.
+
+Fast replay on this prepared machine (from the ProofRun directory):
+    python3.12 scripts/demo-broken-storefront.py --prepared .commit-watch/broken-demo-walkthrough
+
+First run on another machine with this ProofRun checkout, Git and Python 3.12:
+    python3.12 scripts/demo-broken-storefront.py
+
+The first-run command downloads the pinned example and installs its dependencies
+in a dedicated virtual environment. Both modes create fresh copies, run the
+existing tests, and save a new evidence directory under .commit-watch/broken-demo-replays/.
+The helper returns success when the expected before/after demonstration is
+reproduced, even though both full suites intentionally remain red.
+
+Rehearsed browser result: September 29, 2026, 5:48 PM Pacific. Scan
+f600d37248f94f2882469a379492e2bb retained 14 eligible files, discovered 3 dependency
+declarations and returned 12 static migration findings: 8 Pydantic, 3 pandas,
+and 1 web-vitals. OpenRouter denied access, so the agent read 0 files and ran
+0 tests. The following talk track accurately presents that available flow.
+
+0:00–0:25 | Show the example repository
+
+"A dependency update can change what your application accepts, even when the
+code still looks reasonable. This is a small, intentionally broken storefront
+with synthetic data. Its 25 Python tests give us a concrete behavior contract:
+two pass, and 23 expose deliberate defects. Let's use ProofRun to inspect a
+specific issue and see what evidence we can get for a fix."
+
+0:25–0:50 | Public repository → paste URL → Check repository
+
+Paste: https://github.com/Eman-Gon/proofrun-broken-demo
+
+"I paste the repository URL and click Check repository. ProofRun records the
+exact commit, reads the dependency declarations, and displays findings with
+source locations and proposed changes. This run returns twelve migration
+warnings. Model access is unavailable today, which the report makes explicit,
+so these results come from the static checks."
+
+0:50–1:25 | Scroll to broken_shop/models.py:7
+
+Find the first Pydantic card, titled "Review whether this nullable field may be
+omitted," and point at the nickname change.
+
+"Here's the customer nickname field. The code says Optional[str], but under
+Pydantic 2 that permits a null value without making the field optional to send.
+The existing test expects a customer without a nickname to be accepted.
+ProofRun suggests adding an explicit None default. It's one line, tied to this
+file and revision. The card still says unverified because this scan did not
+execute the tests."
+
+Shown patch:
+    - nickname: Optional[str]
+    + nickname: Optional[str] = None
+
+1:25–2:05 | Show the separate local terminal demonstration
+
+"Now I'm independently checking that exact suggestion in a disposable local
+copy. The original nickname test fails. With the one-line change, it passes.
+The controls still accept explicit null and reject an object as a nickname.
+The existing tests and their assertions are unchanged."
+
+"The full suite moves from two passing tests to three. Twenty-two deliberate
+failures remain. This gives us evidence for the nickname repair while keeping
+the rest of the storefront's problems visible. These terminal results are
+separate from the saved dashboard scan."
+
+2:05–2:35 | Return to nickname card → Create PR
+
+Click the card's Create PR button to open the preview. Point to the repository,
+reviewed commit, proposed patch, and unverified label. Click Cancel after showing
+the preview; the second Create PR button would publish a branch and PR.
+
+"The review handoff shows the exact change, target repository, and source
+revision. The preview also preserves this scan's unverified status. An engineer
+can inspect the suggestion and its limitations before deciding to publish it
+for review."
+
+2:35–3:00 | Open scan report
+
+"The saved report records the dependencies, source findings, review status,
+and what actually ran. That gives us a clear next step: a small proposed fix,
+tests that demonstrate its effect, and an honest view of the work remaining.
+That's the workflow we're demonstrating with ProofRun."
+
+Presentation notes
+
+The red baseline is expected: 11 assertion failures plus 12 errors, not 23
+assertion failures. After the nickname-only fix, expect 11 failures plus 11
+errors. The JavaScript migration has no browser test in this example.
+
+For a UI-only two-minute version, omit the terminal segment and say:
+"This is a source-backed suggestion. The next step is to run the existing
+nickname test and its controls before accepting the change."
+
+If a later scan completes agent review, describe its actual findings, source
+files read, and test evidence. A successful selected test run establishes only
+that scope; it does not establish that the full repository is correct.
+
+The BAND banner belongs to a separate customer-import fixture run. Keep it out
+of this example's story. The Neo4j graph records source/finding/fix relationships;
+its presence does not establish that the suggested fix passed tests.
+
+Local scan receipt:
+    .commit-watch/broken-demo-walkthrough/live-scan.json
+
+Measured terminal receipt:
+    .commit-watch/broken-demo-walkthrough/verification-receipt.json
+
+Successful replay receipt:
+    .commit-watch/broken-demo-replays/run-bye7byov/verification-receipt.json
+
+Measured output (Python 3.12.2; Pydantic 2.8.2; pandas 3.0.0):
+    Original full suite:      25 tests; 2 passed; 11 failures; 12 errors
+    Original nickname checks: 3 tests; 2 passed;  0 failures;  1 error
+    Patched nickname checks:  3 tests; 3 passed;  0 failures;  0 errors
+    Patched full suite:       25 tests; 3 passed; 11 failures; 11 errors
