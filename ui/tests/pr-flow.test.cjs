@@ -120,3 +120,25 @@ test('opening the scan report exposes existing evidence without a network reques
   assert.equal(report.scan.result.findings[0].file, 'src/parse.ts');
   assert.equal(h.requests.length, 0);
 });
+
+test('combined preview includes all eligible patches, identifies manual work, and publishes once', async () => {
+  const h = harness(() => ({ ok: true, json: async () => ({ pullRequest: {
+    number: 14, url: 'https://github.com/example/typescript-app/pull/14', findingIndices: [0, 1],
+  } }) }));
+  h.run(`
+    const scan = state.repositoryScans[0];
+    Object.assign(scan.result.findings[0], { line: 1, sourceSha256: 'a'.repeat(64) });
+    scan.result.findings.push({ ...scan.result.findings[0], file: 'src/other.ts' });
+    scan.result.findings.push({ file: 'manual.ts', title: 'Needs design review', line: 2 });
+    createAllPublicPullRequest(scan);
+  `);
+  assert.equal(h.requests.length, 0);
+  assert.match(h.element('pr-dialog-patch').textContent, /src\/parse.ts/);
+  assert.match(h.element('pr-dialog-patch').textContent, /src\/other.ts/);
+  assert.match(h.element('pr-dialog-evidence').textContent, /1 findings require manual review/);
+  assert.match(h.element('pr-dialog-evidence').textContent, /manual.ts:2/);
+  await h.run('publishPullRequest()');
+  assert.deepEqual(h.requests[0].payload, { scanId: 'review-1', findingIndex: 'all' });
+  assert.equal(h.run('state.repositoryScans[0].pullRequests.all.number'), 14);
+  assert.equal(h.run('state.repositoryScans[0].pullRequests[1].number'), 14);
+});

@@ -196,7 +196,13 @@ for confirmation in a fixed overlay with the patch, then creates a `codex/`
 branch containing only the verified application-file change. Stale or
 incomplete evidence cannot publish a PR.
 
-Public repository scans also show **Create PR** beside source-bound agent
+Public repository scans show **Fix all issues · Create PR** above the findings.
+It previews all exact patches together and creates one commit and PR across the
+affected files. Findings without exact patches are listed for manual review;
+overlapping patches are rejected. The combined patch is explicitly unverified,
+even when individual suggestions have selected-test evidence.
+
+Each finding also offers **Create PR for this issue** beside source-bound agent
 suggestions with an exact replacement, and supported migration suggestions.
 This targets the scanned repository and uses a public fork
 when the signed-in GitHub CLI account lacks push permission. GitHub permissions
